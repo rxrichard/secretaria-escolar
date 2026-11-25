@@ -1,99 +1,243 @@
-Secretaria Escolar
-Sistema de gestão escolar que roda inteiro no navegador, em um único arquivo: gestao-escolar.html.
+<div align="center">
 
-Não tem servidor, banco de dados nem cadastro. Os dados ficam na memória da aba enquanto ela estiver aberta, e nada é enviado para a internet.
+# 🏫 Secretaria Escolar
 
-Importante: ao recarregar ou fechar a página, todos os dados são apagados. Antes de sair, use Início → Exportar backup para salvar um arquivo .json. Na próxima vez, use Importar backup para continuar de onde parou.
+**Gestão escolar completa que roda direto no navegador.**
+<br>
+Carômetro · Mapa de Sala · Rifas · Cantina · Planejamento de Aulas · Abonadas
 
-Como usar
-Baixe o arquivo gestao-escolar.html.
-Abra com dois cliques. Funciona melhor no Google Chrome ou no Microsoft Edge, em computador ou celular.
-Na tela Início, digite o nome da escola e, se quiser, envie um logo ou qualquer imagem. Esse nome e essa imagem aparecem no menu, nos PDFs e nos bilhetes de rifa.
-Para conhecer o sistema antes de usar com dados reais, clique em Carregar dados de exemplo. Depois use Limpar tudo para começar do zero.
-É preciso internet na hora de abrir o arquivo, porque as bibliotecas de PDF e de detecção de rosto são baixadas de CDNs públicas (veja Bibliotecas usadas).
+<br>
 
-Módulos
-1. Carômetro
-Envie várias fotos de uma vez e informe a turma antes de enviar.
-O nome do arquivo vira o nome do aluno. Formatos aceitos:
-07 - Ana Souza.jpg → número 7, nome "Ana Souza"
-Ana Souza - 7.jpg → número 7, nome "Ana Souza"
-ana_souza.jpg → sem número, nome "Ana Souza"
-O rosto é detectado e a foto é recortada automaticamente no formato 3x4.
-Quando o rosto não é encontrado, a foto fica marcada com "Conferir". Clique no aluno e use Ajustar enquadramento para arrastar o quadro e dar zoom.
-Edite nome, turma e número clicando no cartão do aluno.
-Renumerar em ordem alfabética: filtre uma turma e o botão aparece.
-Exportar: PDF (uma página por turma, de 4 a 7 fotos por linha) e JSON (inclui as fotos).
-2. Mapa de Sala
-Defina o número de fileiras e de carteiras por fileira.
-Os alunos vêm automaticamente do Carômetro. Escolha a turma no seletor.
-Arraste o aluno até a carteira. Arrastar de uma carteira para outra troca os dois de lugar, e arrastar de volta para "Sem lugar" tira o aluno da carteira.
-No celular: toque no aluno e depois na carteira.
-Preenchimento automático por número, em ordem alfabética ou aleatório.
-Exportar/Importar JSON, para editar o mapa depois, e PDF em folha deitada com a lousa no topo.
-3. Rifas
-Crie a rifa com nome, prêmio, valor do número, quantidade, primeiro número, data do sorteio e chave Pix (opcional).
-Os números são gerados automaticamente. Clique em um número para marcá-lo como vendido, com o nome do comprador, o telefone e se já pagou.
-Marque Vender vários de uma vez para vender vários números para a mesma pessoa.
-Um painel mostra os números vendidos e disponíveis, o valor arrecadado e quanto falta receber, além da tabela de compradores.
-Sorteio com animação, entre os números vendidos. Também é possível incluir os não vendidos. Dá para sortear mais de um prêmio.
-Exportar: lista em PDF (vendidos, disponíveis e resultado do sorteio), bilhetes com canhoto em PDF (5 por folha A4) e JSON.
-4. Cantina e Produtos
-Cadastre produtos com nome, preço, foto e estoque. Deixe o estoque em branco para não controlar quantidade.
-Monte o carrinho, escolha a forma de pagamento e, se for em dinheiro, informe o valor recebido para calcular o troco.
-As vendas ficam registradas por dia, e é possível cancelar uma venda (os itens voltam para o estoque).
-PDFs: catálogo de produtos com foto, comprovante de venda (formato de bobina de 80 mm) e relatório de vendas do dia.
-Exportar/Importar JSON de produtos e vendas.
-5. Planejamento de Aulas
-Cadastre turmas e disciplinas. As turmas valem para todo o sistema.
-Cada aula tem data, turma, disciplina, aula/horário, conteúdo, objetivos, recursos e observações.
-Veja as aulas em lista ou calendário. No calendário, clique em um dia para planejar uma aula naquela data.
-Filtre por mês, turma e disciplina. O PDF sai com o que estiver filtrado.
-Exportar/Importar JSON.
-6. Abonadas e Substituições
-Registre o pedido com professor, data, tipo (abonada, atestado, licença…), motivo, turmas e aulas afetadas.
-Status: Pendente, Aprovada ou Rejeitada, com botões rápidos para aprovar ou rejeitar.
-Para planejar a substituição, informe quem vai cobrir as aulas e a atividade deixada para a turma. O painel avisa quantas faltas futuras ainda não têm substituto.
-Filtre por período, status e professor.
-Relatório em PDF com linhas para a assinatura da direção e da coordenação, e JSON.
-Recursos gerais
-Tema claro e escuro (botão no menu).
-Mensagens de confirmação e de erro, e validação dos campos obrigatórios.
-Limpar tudo: apaga toda a memória da aplicação, depois de pedir confirmação.
-Backup completo: um único JSON com todos os módulos.
-Aviso do navegador se a página for fechada com dados na memória.
-Publicar na internet (opcional)
-Como é um arquivo HTML estático, ele pode ser hospedado gratuitamente, por exemplo no GitHub Pages:
+![HTML](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
+![CSS](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+<br>
+![Sem servidor](https://img.shields.io/badge/servidor-nenhum-0f7466?style=flat-square)
+![Sem banco de dados](https://img.shields.io/badge/banco%20de%20dados-nenhum-0f7466?style=flat-square)
+![Arquivo único](https://img.shields.io/badge/arquivo-único-0f7466?style=flat-square)
+![Tema escuro](https://img.shields.io/badge/tema-claro%20%2F%20escuro-0f7466?style=flat-square)
 
-Crie um repositório e envie gestao-escolar.html (e este README.md).
-Se quiser que o sistema abra direto pelo endereço do site, renomeie o arquivo para index.html.
-No repositório, vá em Settings → Pages, escolha a branch main e salve.
-Mesmo publicado, cada pessoa que abre o site tem os próprios dados, só no navegador dela. Ninguém vê os dados de outra pessoa.
+<br>
 
-Privacidade
-Fotos, nomes e demais dados nunca saem do computador. O processamento (recorte de fotos, PDFs, sorteios) é feito no próprio navegador.
-O sistema só acessa a internet para baixar as bibliotecas listadas abaixo e as fontes do Google Fonts.
-O único item gravado no navegador é a escolha de tema claro ou escuro.
-Bibliotecas usadas
-Biblioteca	Versão	Para que serve	Origem
-jsPDF	2.5.1	Geração dos PDFs	cdnjs
-jsPDF-AutoTable	3.8.2	Tabelas nos PDFs	cdnjs
-face-api (modelo Tiny Face Detector)	1.7.13	Detecção de rosto no carômetro (carregada só quando você envia fotos)	jsDelivr
-Inter e Bricolage Grotesque	—	Fontes da interface	Google Fonts
-Limitações conhecidas
-Sem internet, os PDFs não são gerados e as fotos não são enquadradas automaticamente (ficam centralizadas). O resto do sistema continua funcionando.
-Fotos no formato HEIC (padrão do iPhone) não são lidas. Converta para JPG antes de enviar.
-Muitas fotos ocupam bastante memória. Turmas grandes funcionam bem, mas centenas de fotos de uma vez podem deixar o navegador lento em computadores mais simples.
-Os comprovantes da cantina não têm valor fiscal.
-Para quem quiser modificar o código
-Tudo está em gestao-escolar.html, dividido em blocos comentados:
+### [🚀 Abrir o sistema](https://SEU-USUARIO.github.io/secretaria-escolar/)
 
-Bloco	Conteúdo
-<style>	Cores do tema (variáveis em :root), layout e componentes
-1. Estado em memória	Objeto state com todos os dados (freshState() define a estrutura)
-2. Utilitários	Datas, moeda, toasts, modais, download e importação de arquivos
-3. Imagens e detecção de rosto	Redução, recorte 3x4 e uso do face-api
-4. PDF	Cabeçalho, rodapé e estilos de tabela padrão
-6–11. Módulos	Car, SeatMap, Rifa, Cantina, Plan, Abon
-12. Aplicação	Navegação, tela inicial, tema, backup, dados de exemplo e "Limpar tudo"
-Cada módulo tem init() (liga os botões) e render() (redesenha a tela). Depois de alterar o state, chame App.refresh() para atualizar tudo.
+<sub>Troque <code>SEU-USUARIO</code> pelo seu usuário do GitHub depois de ativar o GitHub Pages.</sub>
+
+<br><br>
+
+<img src="docs/inicio.png" alt="Tela inicial da Secretaria Escolar" width="900">
+
+</div>
+
+---
+
+## ✨ Por que usar
+
+| | |
+|---|---|
+| 🔒 **Privado** | Fotos e dados dos alunos **nunca saem do computador**. Não há servidor nem cadastro. |
+| ⚡ **Sem instalação** | É um único arquivo `index.html`. Abriu, funcionou. |
+| 📄 **Tudo vira PDF** | Carômetro, mapa de sala, bilhetes de rifa, catálogo, comprovantes e relatórios. |
+| 🤖 **Rosto automático** | As fotos dos alunos são enquadradas sozinhas no formato 3x4. |
+| 📱 **Funciona no celular** | Layout responsivo, com toque no lugar de arrastar no mapa de sala. |
+
+> [!WARNING]
+> **Os dados ficam só na memória da aba.** Ao recarregar ou fechar a página, tudo é apagado.
+> Antes de sair, use **Início → Exportar backup** e, na próxima vez, **Importar backup**.
+
+---
+
+## 🧭 Módulos
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 📸 Carômetro
+- Envio de várias fotos de uma vez
+- **Rosto detectado e recortado** automaticamente em 3x4
+- Editor para ajustar o enquadramento (arrastar + zoom)
+- Nome e número lidos do nome do arquivo
+- Edição de nome, turma e número
+- 📄 PDF por turma · 💾 JSON
+
+</td>
+<td width="50%" valign="top">
+
+### 🪑 Mapa de Sala
+- Fileiras e carteiras configuráveis
+- **Arrastar e soltar** alunos nas carteiras
+- Foto e nome em cada lugar
+- Alunos importados do Carômetro
+- Preenchimento por número, alfabético ou aleatório
+- 📄 PDF · 💾 Exportar / importar JSON
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🎟️ Rifas
+- Nome, prêmio, valor, quantidade e data do sorteio
+- Números gerados automaticamente
+- Comprador, telefone e controle de pagamento
+- Venda de vários números de uma vez
+- **Sorteio animado** com resultado salvo
+- 📄 Lista · 📄 Bilhetes com canhoto · 💾 JSON
+
+</td>
+<td valign="top">
+
+### 🛒 Cantina e Produtos
+- Produtos com foto, preço e estoque
+- Carrinho com cálculo de troco
+- Registro e cancelamento de vendas
+- Resumo do dia por produto e forma de pagamento
+- 📄 Catálogo · 📄 Comprovante · 📄 Relatório do dia
+- 💾 JSON
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 📅 Planejamento de Aulas
+- Cadastro de turmas e disciplinas
+- Conteúdo, objetivos, recursos e observações
+- Visualização em **lista** ou **calendário**
+- Filtros por mês, turma e disciplina
+- 📄 PDF · 💾 Exportar / importar JSON
+
+</td>
+<td valign="top">
+
+### 🧑‍🏫 Abonadas e Substituições
+- Solicitação com data, motivo e turmas afetadas
+- Status **Pendente / Aprovada / Rejeitada**
+- Quem cobre a aula e a atividade deixada
+- Alerta de faltas **sem substituto**
+- 📄 Relatório por período · 💾 JSON
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🖼️ Telas
+
+<div align="center">
+
+| Carômetro | Mapa de Sala |
+|:---:|:---:|
+| <img src="docs/carometro.png" alt="Carômetro" width="420"> | <img src="docs/mapa-de-sala.png" alt="Mapa de sala" width="420"> |
+| **Rifas** | **Cantina** |
+| <img src="docs/rifas.png" alt="Rifas" width="420"> | <img src="docs/cantina.png" alt="Cantina" width="420"> |
+| **Planejamento** | **Abonadas** |
+| <img src="docs/planejamento.png" alt="Planejamento de aulas" width="420"> | <img src="docs/abonadas.png" alt="Abonadas" width="420"> |
+
+**Tema escuro**
+
+<img src="docs/tema-escuro.png" alt="Sistema no tema escuro" width="700">
+
+</div>
+
+---
+
+## 🚀 Como usar
+
+1. Abra o sistema pelo link do GitHub Pages **ou** baixe o `index.html` e abra com dois cliques.
+2. Em **Início**, digite o nome da escola e, se quiser, envie um logo ou qualquer imagem.
+3. Quer conhecer antes? Clique em **Carregar dados de exemplo**. Depois use **Limpar tudo**.
+
+> [!TIP]
+> **Nomeie as fotos com o nome do aluno** para o carômetro preencher tudo sozinho:
+>
+> | Nome do arquivo | Resultado |
+> |---|---|
+> | `07 - Ana Souza.jpg` | Nº **7** · **Ana Souza** |
+> | `Ana Souza - 7.jpg` | Nº **7** · **Ana Souza** |
+> | `ana_souza.jpg` | sem número · **Ana Souza** |
+
+<details>
+<summary><b>💡 Mais dicas</b></summary>
+<br>
+
+- Fotos marcadas com **"Conferir"** não tiveram o rosto encontrado. Clique no aluno e use **Ajustar enquadramento**.
+- No celular, para montar o mapa de sala, **toque no aluno e depois na carteira**.
+- Na rifa, marque **Vender vários de uma vez** para vender vários números à mesma pessoa.
+- Cada módulo tem **Exportar / Importar JSON** próprio. O **backup completo** fica na tela Início.
+- Os bilhetes de rifa saem 5 por folha A4, com 5 mm entre eles para facilitar o corte.
+
+</details>
+
+---
+
+## 🌐 Publicar no GitHub Pages
+
+1. Envie `index.html`, `README.md` e a pasta `docs/` para o repositório usando **Add file → Upload files**.
+   Não copie e cole o texto do README: envie o arquivo, para não perder a formatação.
+2. Vá em **Settings → Pages**.
+3. Em *Source*, escolha **Deploy from a branch**, a branch `main` e a pasta `/ (root)`, e clique em **Save**.
+4. Em 1 ou 2 minutos o endereço aparece no topo da página. Atualize o link **🚀 Abrir o sistema** deste README.
+
+> [!NOTE]
+> Mesmo publicado na internet, **cada pessoa tem os próprios dados**, guardados só no navegador dela. Ninguém vê o que outra pessoa cadastrou.
+
+---
+
+## 🧩 Bibliotecas
+
+| Biblioteca | Versão | Uso |
+|---|:---:|---|
+| [jsPDF](https://github.com/parallax/jsPDF) | 2.5.1 | Geração dos PDFs |
+| [jsPDF-AutoTable](https://github.com/simonbengtsson/jsPDF-AutoTable) | 3.8.2 | Tabelas nos PDFs |
+| [face-api](https://github.com/vladmandic/face-api) | 1.7.13 | Detecção de rosto (*Tiny Face Detector*), carregada só ao enviar fotos |
+| [Inter](https://fonts.google.com/specimen/Inter) · [Bricolage Grotesque](https://fonts.google.com/specimen/Bricolage+Grotesque) | — | Fontes da interface |
+
+As bibliotecas são carregadas por CDN (cdnjs, jsDelivr e Google Fonts), por isso é preciso **internet ao abrir** o sistema.
+
+---
+
+## ⚠️ Limitações
+
+- **Sem internet**, os PDFs não são gerados e as fotos ficam apenas centralizadas, sem detecção de rosto.
+- Fotos **HEIC** (padrão do iPhone) não são lidas. Converta para JPG antes de enviar.
+- Centenas de fotos de uma vez podem deixar computadores mais simples lentos.
+- Os comprovantes da cantina **não têm valor fiscal**.
+
+---
+
+<details>
+<summary><b>🛠️ Para quem quiser modificar o código</b></summary>
+<br>
+
+Tudo está em `index.html`, em blocos comentados:
+
+| Bloco | Conteúdo |
+|---|---|
+| `<style>` | Cores do tema (variáveis em `:root`), layout e componentes |
+| 1. Estado em memória | Objeto `state` com todos os dados. `freshState()` define a estrutura |
+| 2. Utilitários | Datas, moeda, toasts, modais, download e importação de arquivos |
+| 3. Imagens e rosto | Redução, recorte 3x4 e uso do face-api |
+| 4. PDF | Cabeçalho, rodapé e estilos de tabela |
+| 6 a 11. Módulos | `Car`, `SeatMap`, `Rifa`, `Cantina`, `Plan`, `Abon` |
+| 12. Aplicação | Navegação, início, tema, backup, exemplos e "Limpar tudo" |
+
+Cada módulo tem `init()`, que liga os botões, e `render()`, que redesenha a tela. Depois de alterar o `state`, chame `App.refresh()`.
+
+**Estrutura do repositório**
+
+```
+secretaria-escolar/
+├── index.html      ← o sistema inteiro
+├── README.md       ← este arquivo
+└── docs/           ← imagens usadas no README
+```
+
+</details>
+
+<div align="center">
+<br>
+<sub>Feito para facilitar o dia a dia da escola. 💚</sub>
+</div>
