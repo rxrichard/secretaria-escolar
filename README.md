@@ -19,11 +19,8 @@ Carômetro · Mapa de Sala · Rifas · Cantina · Planejamento de Aulas · Abona
 
 <br>
 
-### [🚀 Abrir o sistema](https://SEU-USUARIO.github.io/secretaria-escolar/)
+### [🚀 Abrir o sistema](https://rxrichard.github.io/secretaria-escolar/)
 
-<sub>Troque <code>SEU-USUARIO</code> pelo seu usuário do GitHub depois de ativar o GitHub Pages.</sub>
-
-<br><br>
 
 <img src="docs/inicio.png" alt="Tela inicial da Secretaria Escolar" width="900">
 
