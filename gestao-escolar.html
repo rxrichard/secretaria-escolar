@@ -1,0 +1,2750 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Secretaria Escolar</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--
+  =====================================================================
+  SECRETARIA ESCOLAR — sistema de gestão 100% no navegador
+  ---------------------------------------------------------------------
+  • Todos os dados ficam APENAS na memória (objeto `state`) desta aba.
+    Recarregar ou fechar a página apaga tudo. Use "Backup (JSON)".
+  • Bibliotecas via CDN:
+      - jsPDF + jsPDF-AutoTable  → geração de PDF
+      - face-api (@vladmandic)   → detecção de rosto (carregada sob demanda)
+  • Módulos: Início, Carômetro, Mapa de Sala, Rifas, Cantina,
+             Planejamento de Aulas, Abonadas.
+  =====================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+/* Layout: menu lateral fixo + área de trabalho; no celular o menu vira gaveta. */
+:root {
+  --bg: #f3f6f5;
+  --surface: #ffffff;
+  --surface-2: #eaf0ee;
+  --border: #d6dfdc;
+  --fg: #17211f;
+  --muted: #5a6a66;
+  --accent: #0f7466;
+  --accent-hover: #0b5f53;
+  --accent-fg: #ffffff;
+  --accent-soft: #d9eeea;
+  --ok: #1d7f47;
+  --ok-soft: #dcf2e4;
+  --warn: #9a5b00;
+  --warn-soft: #fbedd3;
+  --danger: #b3361b;
+  --danger-soft: #fbe2db;
+  --info: #2459c4;
+  --info-soft: #e0e9fb;
+  --shadow: 0 1px 2px rgba(16, 40, 36, .06), 0 4px 16px rgba(16, 40, 36, .06);
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --radius: 10px;
+  --sidebar-w: 248px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1513; --surface: #16201e; --surface-2: #1d2a27; --border: #2b3a37;
+    --fg: #e3ecea; --muted: #94a5a1; --accent: #3dbfa8; --accent-hover: #5fd3be;
+    --accent-fg: #052019; --accent-soft: #173d36;
+    --ok: #5cd08d; --ok-soft: #173826; --warn: #f0b555; --warn-soft: #3d2d10;
+    --danger: #f08a70; --danger-soft: #42201a; --info: #86a9f5; --info-soft: #1c2a4a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1513; --surface: #16201e; --surface-2: #1d2a27; --border: #2b3a37;
+  --fg: #e3ecea; --muted: #94a5a1; --accent: #3dbfa8; --accent-hover: #5fd3be;
+  --accent-fg: #052019; --accent-soft: #173d36;
+  --ok: #5cd08d; --ok-soft: #173826; --warn: #f0b555; --warn-soft: #3d2d10;
+  --danger: #f08a70; --danger-soft: #42201a; --info: #86a9f5; --info-soft: #1c2a4a;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.2; margin: 0; text-wrap: balance; }
+h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: 1.2rem; font-weight: 700; }
+h3 { font-size: 1rem; font-weight: 600; font-family: var(--font-body); }
+p { margin: 0; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- Estrutura ---------- */
+.sidebar {
+  position: fixed; inset: 0 auto 0 0; width: var(--sidebar-w);
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 40;
+  padding: calc(env(safe-area-inset-top, 0px) + 18px) 14px calc(env(safe-area-inset-bottom, 0px) + 14px) max(14px, env(safe-area-inset-left, 0px));
+  transition: transform .25s ease;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; }
+.brand-mark {
+  width: 40px; height: 40px; border-radius: 9px; flex: none;
+  background: var(--accent); color: var(--accent-fg);
+  display: grid; place-items: center; font: 700 1.1rem var(--font-display); overflow: hidden;
+}
+.brand-mark img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.brand-text { min-width: 0; }
+.brand-text strong { display: block; font-family: var(--font-display); font-size: 1.02rem; line-height: 1.2; overflow-wrap: anywhere; }
+.brand-text span { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; flex: 1; }
+.nav button {
+  all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 11px;
+  padding: 9px 10px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: .94rem;
+}
+.nav button svg { width: 19px; height: 19px; flex: none; }
+.nav button:hover { background: var(--surface-2); color: var(--fg); }
+.nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav button:focus-visible { outline: 2px solid var(--accent); }
+.nav .badge-count { margin-left: auto; font-size: .72rem; background: var(--surface-2); color: var(--muted); padding: 1px 7px; border-radius: 99px; font-variant-numeric: tabular-nums; }
+.nav button.active .badge-count { background: var(--surface); color: var(--accent); }
+.sidebar-foot { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.mem-note { font-size: .75rem; color: var(--muted); line-height: 1.4; padding: 0 4px; }
+.mem-note b { color: var(--warn); }
+
+.app { margin-left: var(--sidebar-w); min-height: 100%; display: flex; flex-direction: column; }
+.topbar {
+  display: none; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  align-items: center; gap: 12px;
+}
+.topbar h2 { font-size: 1.05rem; }
+main {
+  flex: 1; width: 100%; max-width: 1280px; margin: 0 auto;
+  padding-block: 28px 48px; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px));
+}
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 35; }
+
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-105%); box-shadow: var(--shadow); }
+  body.nav-open .sidebar { transform: none; }
+  .app { margin-left: 0; }
+  .topbar { display: flex; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 31; background: var(--surface); }
+  main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 40px; }
+}
+
+/* ---------- Componentes ---------- */
+.view-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+.view-head p { color: var(--muted); margin-top: 4px; max-width: 65ch; }
+.eyebrow { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 700; margin-bottom: 4px; }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+.panel + .panel { margin-top: 16px; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.row.end { justify-content: flex-end; }
+.spacer { flex: 1; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 700px) { .grid-2, .grid-3 { grid-template-columns: minmax(0, 1fr); } }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+  padding: 8px 14px; border-radius: 8px; font: 500 .9rem var(--font-body); cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s; white-space: nowrap; text-decoration: none;
+}
+.btn svg { width: 17px; height: 17px; flex: none; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.btn.danger:hover { background: var(--danger-soft); }
+.btn.danger.solid { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.sm { padding: 5px 10px; font-size: .82rem; }
+.btn.icon { padding: 7px; }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field > span, .label { font-size: .8rem; font-weight: 600; color: var(--muted); }
+.field .req { color: var(--danger); }
+input[type=text], input[type=number], input[type=date], input[type=month], input[type=tel], input[type=search], select, textarea {
+  width: 100%; font: inherit; font-size: .93rem; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; min-width: 0;
+}
+textarea { resize: vertical; min-height: 70px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.invalid { border-color: var(--danger) !important; box-shadow: 0 0 0 3px var(--danger-soft) !important; }
+.check { display: inline-flex; align-items: center; gap: 7px; font-size: .9rem; cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+input[type=range] { accent-color: var(--accent); width: 100%; }
+.inline-field { display: flex; align-items: center; gap: 8px; }
+.inline-field > span { font-size: .82rem; color: var(--muted); white-space: nowrap; }
+.inline-field input, .inline-field select { width: auto; }
+
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 8px; padding: 3px; gap: 2px; }
+.seg button { all: unset; cursor: pointer; padding: 5px 12px; border-radius: 6px; font-size: .85rem; color: var(--muted); font-weight: 500; }
+.seg button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.seg button:focus-visible { outline: 2px solid var(--accent); }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px; font-size: .76rem; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.danger { background: var(--danger-soft); color: var(--danger); }
+.pill.info { background: var(--info-soft); color: var(--info); }
+.pill.neutral { background: var(--surface-2); color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 99px; padding: 3px 4px 3px 11px; font-size: .85rem; }
+.chip button { all: unset; cursor: pointer; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+.chip button:hover { background: var(--danger-soft); color: var(--danger); }
+.chip.pick { padding: 4px 11px; cursor: pointer; user-select: none; }
+.chip.pick.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat .k { font-size: .76rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.stat .v { font: 700 1.55rem var(--font-display); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat .s { font-size: .8rem; color: var(--muted); }
+button.stat { text-align: left; cursor: pointer; font: inherit; color: inherit; }
+button.stat:hover { border-color: var(--accent); }
+
+.empty { text-align: center; padding: 40px 20px; color: var(--muted); border: 1.5px dashed var(--border); border-radius: var(--radius); background: var(--surface); }
+.empty strong { display: block; color: var(--fg); font-size: 1.02rem; margin-bottom: 4px; }
+.empty .row { justify-content: center; margin-top: 14px; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+table.data { width: 100%; border-collapse: collapse; font-size: .88rem; }
+table.data th { text-align: left; font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--surface-2); padding: 9px 12px; white-space: nowrap; }
+table.data td { padding: 9px 12px; border-top: 1px solid var(--border); vertical-align: top; }
+table.data td.actions { white-space: nowrap; text-align: right; }
+table.data tr:hover td { background: color-mix(in srgb, var(--surface-2) 50%, transparent); }
+
+.avatar { background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; overflow: hidden; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---------- Toasts ---------- */
+#toasts { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 100; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.toast { background: var(--fg); color: var(--bg); padding: 11px 14px; border-radius: 9px; box-shadow: var(--shadow); font-size: .9rem; display: flex; gap: 10px; align-items: flex-start; animation: toastIn .25s ease; border-left: 4px solid var(--accent); }
+.toast.error { border-left-color: var(--danger); }
+.toast.warn { border-left-color: var(--warn); }
+.toast.out { opacity: 0; transform: translateY(6px); transition: .25s; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Modal ---------- */
+.modal-back { position: fixed; inset: 0; background: rgba(8, 20, 18, .5); z-index: 80; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); animation: fade .15s ease; }
+@keyframes fade { from { opacity: 0; } }
+.modal { background: var(--surface); border-radius: 12px; width: 100%; max-width: 520px; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.modal.wide { max-width: 760px; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid var(--border); }
+.modal-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.modal-foot { padding: 12px 18px 16px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+/* ---------- Overlay de progresso ---------- */
+.progress-overlay { position: fixed; inset: 0; z-index: 90; background: color-mix(in srgb, var(--bg) 88%, transparent); display: grid; place-items: center; padding: 16px; }
+.progress-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; width: min(420px, 100%); box-shadow: var(--shadow); }
+.bar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin: 12px 0 6px; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .2s; }
+
+/* ---------- Início ---------- */
+.notice { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--radius); background: var(--warn-soft); color: var(--fg); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.notice svg { width: 22px; height: 22px; color: var(--warn); flex: none; margin-top: 1px; }
+.logo-box { width: 88px; height: 88px; border: 1.5px dashed var(--border); border-radius: 10px; display: grid; place-items: center; overflow: hidden; background: var(--surface-2); flex: none; color: var(--muted); font-size: .75rem; text-align: center; }
+.logo-box img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
+
+/* ---------- Carômetro ---------- */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+.toolbar input[type=search] { max-width: 260px; }
+.toolbar select { width: auto; }
+.face-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.face-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color .15s, transform .15s; text-align: left; padding: 0; font: inherit; color: inherit; }
+.face-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.face-photo { aspect-ratio: 3 / 4; position: relative; max-width: 100%; }
+.face-photo .avatar { width: 100%; height: 100%; font-size: 2.4rem; }
+.face-num { position: absolute; top: 8px; left: 8px; background: var(--surface); color: var(--fg); font-weight: 700; font-size: .78rem; padding: 2px 8px; border-radius: 6px; font-variant-numeric: tabular-nums; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.face-flag { position: absolute; bottom: 8px; right: 8px; }
+.face-info { padding: 9px 11px 11px; }
+.face-info strong { display: block; font-size: .9rem; line-height: 1.25; overflow-wrap: anywhere; }
+.face-info span { font-size: .78rem; color: var(--muted); }
+.turma-title { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 10px; }
+.turma-title:first-child { margin-top: 0; }
+.photo-edit { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 520px) { .photo-edit { grid-template-columns: minmax(0, 1fr); } .photo-edit .face-photo { max-width: 160px; } }
+.photo-edit .face-photo { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.crop-stage { position: relative; touch-action: none; user-select: none; margin: 0 auto; max-width: 100%; }
+.crop-stage canvas { display: block; max-width: 100%; border-radius: 6px; cursor: move; }
+
+/* ---------- Mapa de sala ---------- */
+.seat-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 960px) { .seat-layout { grid-template-columns: minmax(0, 1fr); } }
+.pool { max-height: 70vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; min-height: 80px; padding: 4px; border-radius: 8px; }
+.pool.drag-over { background: var(--accent-soft); }
+@media (max-width: 960px) { .pool { flex-direction: row; flex-wrap: wrap; max-height: 220px; } }
+.stud-chip { display: flex; align-items: center; gap: 8px; padding: 5px 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; cursor: grab; font-size: .85rem; user-select: none; }
+.stud-chip .avatar { width: 28px; height: 28px; border-radius: 50%; font-size: .72rem; flex: none; }
+.stud-chip.selected, .seat.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+.classroom { overflow-x: auto; padding-bottom: 6px; }
+.board { background: var(--accent); color: var(--accent-fg); text-align: center; font-weight: 600; font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; border-radius: 8px; padding: 9px; margin-bottom: 18px; }
+.seats { display: grid; gap: 10px; min-width: max-content; }
+.seat { width: 108px; min-height: 120px; border: 1.5px dashed var(--border); border-radius: 9px; background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 8px 6px; position: relative; font-size: .78rem; text-align: center; transition: background .12s, border-color .12s; cursor: pointer; }
+.seat.filled { border-style: solid; cursor: grab; }
+.seat.drag-over { background: var(--accent-soft); border-color: var(--accent); }
+.seat .pos { position: absolute; top: 4px; left: 6px; font-size: .66rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.seat .avatar { width: 54px; height: 54px; border-radius: 50%; font-size: 1rem; }
+.seat .nm { font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+.seat .rm { position: absolute; top: 2px; right: 2px; all: unset; }
+.seat .x { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; font-size: 14px; line-height: 1; }
+.seat .x:hover { background: var(--danger-soft); color: var(--danger); }
+.seat .empty-lbl { color: var(--muted); font-size: .74rem; }
+
+/* ---------- Rifas ---------- */
+.raffle-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 16px; }
+.raffle-tab { all: unset; cursor: pointer; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-weight: 500; font-size: .9rem; white-space: nowrap; }
+.raffle-tab.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.raffle-tab:focus-visible { outline: 2px solid var(--accent); }
+.meter { height: 10px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--ok); border-radius: 99px; }
+.numbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px; }
+.nbtn { all: unset; box-sizing: border-box; cursor: pointer; text-align: center; padding: 8px 2px; border-radius: 7px; font-weight: 700; font-size: .9rem; border: 1px solid var(--border); background: var(--surface); font-variant-numeric: tabular-nums; position: relative; }
+.nbtn:hover { border-color: var(--accent); }
+.nbtn:focus-visible { outline: 2px solid var(--accent); }
+.nbtn.sold { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.nbtn.sold.unpaid { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.nbtn.win { background: var(--info); color: #fff; border-color: var(--info); }
+.nbtn.sel { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--accent-soft); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .8rem; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; border: 1px solid var(--border); }
+.draw-display { text-align: center; padding: 24px 10px; }
+.draw-display .big { font: 700 4.5rem/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--accent); }
+.draw-display .who { font-size: 1.2rem; font-weight: 600; margin-top: 10px; min-height: 1.6em; }
+
+/* ---------- Cantina ---------- */
+.shop { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; align-items: start; }
+@media (max-width: 1050px) { .shop { grid-template-columns: minmax(0, 1fr); } }
+.prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
+.prod { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.prod-img { aspect-ratio: 1; background: var(--surface-2); display: grid; place-items: center; color: var(--muted); max-width: 100%; }
+.prod-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.prod-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.prod-body strong { line-height: 1.25; overflow-wrap: anywhere; }
+.prod-price { font: 700 1.1rem var(--font-display); font-variant-numeric: tabular-nums; }
+.prod-foot { display: flex; gap: 6px; margin-top: auto; }
+.prod-foot .btn.primary { flex: 1; }
+.cart { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+@media (max-width: 900px) { .cart { top: calc(env(safe-area-inset-top, 0px) + 70px); position: static; } }
+.cart-items { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; max-height: 300px; overflow-y: auto; }
+.cart-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.cart-item .nm { font-weight: 600; font-size: .88rem; overflow-wrap: anywhere; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.stepper button { all: unset; cursor: pointer; width: 28px; height: 26px; text-align: center; font-weight: 700; }
+.stepper button:hover { background: var(--surface-2); }
+.stepper span { min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; font-size: .88rem; }
+.total-line { display: flex; justify-content: space-between; align-items: baseline; font-size: 1rem; }
+.total-line b { font: 700 1.5rem var(--font-display); font-variant-numeric: tabular-nums; }
+.img-drop { border: 1.5px dashed var(--border); border-radius: 10px; aspect-ratio: 1; max-width: 160px; width: 100%; display: grid; place-items: center; overflow: hidden; cursor: pointer; background: var(--surface-2); color: var(--muted); font-size: .8rem; text-align: center; padding: 0; }
+.img-drop img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ---------- Planejamento ---------- */
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--border); gap: 1px; }
+.cal-h { background: var(--surface-2); text-align: center; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; padding: 6px 2px; }
+.cal-d { background: var(--surface); min-height: 108px; padding: 5px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-width: 0; }
+.cal-d:hover { background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface)); }
+.cal-d.out { background: var(--surface-2); opacity: .55; }
+.cal-d.today .dn { background: var(--accent); color: var(--accent-fg); }
+.cal-d .dn { font-size: .78rem; font-weight: 600; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; font-variant-numeric: tabular-nums; }
+.cal-ev { font-size: .72rem; background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 2px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.cal-ev:hover { filter: brightness(.95); }
+@media (max-width: 640px) { .cal-d { min-height: 64px; } .cal-ev { font-size: 0; padding: 0; height: 6px; } }
+.lesson-day { margin-bottom: 18px; }
+.lesson-day h3 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; }
+.lesson { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 8px; }
+.lesson + .lesson { margin-top: 8px; }
+.lesson-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lesson dl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: .88rem; }
+.lesson dt { color: var(--muted); font-weight: 600; }
+.lesson dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .lesson dl { grid-template-columns: minmax(0, 1fr); } .lesson dt { margin-top: 4px; } }
+</style>
+</head>
+<body>
+
+<!-- ===================== MENU LATERAL ===================== -->
+<aside class="sidebar" id="sidebar" aria-label="Menu principal">
+  <div class="brand">
+    <div class="brand-mark" id="brand-mark">SE</div>
+    <div class="brand-text">
+      <strong id="brand-name">Secretaria Escolar</strong>
+      <span>Gestão em memória</span>
+    </div>
+  </div>
+  <nav class="nav" id="nav">
+    <button data-view="inicio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Início</button>
+    <button data-view="carometro"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="9" rx="1"/><circle cx="6.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="6.5" r="1.5"/><path d="M3 16h7M3 20h5M14 16h7M14 20h5"/></svg>Carômetro<span class="badge-count" id="cnt-alunos">0</span></button>
+    <button data-view="mapa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="4" rx="1"/><rect x="3" y="11" width="5" height="4" rx="1"/><rect x="10" y="11" width="5" height="4" rx="1"/><rect x="17" y="11" width="4" height="4" rx="1"/><rect x="3" y="18" width="5" height="3" rx="1"/><rect x="10" y="18" width="5" height="3" rx="1"/></svg>Mapa de Sala</button>
+    <button data-view="rifas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 0 0 4v5a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-5a2 2 0 0 0 0-4V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/><path d="M9 6v12" stroke-dasharray="2 2"/></svg>Rifas<span class="badge-count" id="cnt-rifas">0</span></button>
+    <button data-view="cantina"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.7 12.2a1 1 0 0 0 1 .8h9.6a1 1 0 0 0 1-.8L21 7H6"/></svg>Cantina<span class="badge-count" id="cnt-cart">0</span></button>
+    <button data-view="planejamento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M7 13h4M7 17h7"/></svg>Planejamento</button>
+    <button data-view="abonadas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2"/><path d="m15 18 2 2 4-4"/></svg>Abonadas<span class="badge-count" id="cnt-abon">0</span></button>
+  </nav>
+  <div class="sidebar-foot">
+    <button class="btn" id="btn-theme" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg><span id="theme-label">Tema escuro</span></button>
+    <button class="btn danger" id="btn-clear-all" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14"/></svg>Limpar tudo</button>
+    <p class="mem-note"><b>Memória temporária:</b> os dados somem ao fechar ou recarregar a aba. Faça backup em JSON.</p>
+  </div>
+</aside>
+<div class="scrim" id="scrim" hidden></div>
+
+<div class="app">
+  <header class="topbar">
+    <button class="btn icon" id="btn-menu" type="button" aria-label="Abrir menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <h2 id="topbar-title">Início</h2>
+  </header>
+
+  <main>
+    <!-- ===================== INÍCIO ===================== -->
+    <section class="view" id="view-inicio" hidden>
+      <div class="view-head">
+        <div>
+          <div class="eyebrow" id="home-date"></div>
+          <h1 id="home-title">Secretaria Escolar</h1>
+          <p>Carômetro, mapa de sala, rifas, cantina, planejamento e abonadas num só lugar. Nada sai do seu computador.</p>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="notice">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          <div><strong>Os dados ficam só nesta aba do navegador.</strong> Não há servidor nem banco de dados: ao recarregar ou fechar a página tudo é apagado. Antes de sair, use <b>Exportar backup</b> e, na próxima vez, <b>Importar backup</b>.</div>
+        </div>
+        <div class="stats" id="home-stats"></div>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head"><h2>Dados da escola</h2></div>
+            <div class="row" style="align-items:flex-start;flex-wrap:nowrap">
+              <button class="logo-box" id="logo-box" type="button" title="Enviar logotipo">Enviar logo</button>
+              <div class="stack" style="flex:1;gap:10px;min-width:0">
+                <label class="field"><span>Nome da escola</span><input type="text" id="set-school" placeholder="Nome da sua escola ou instituição"></label>
+                <div class="row">
+                  <button class="btn sm" id="btn-logo" type="button">Trocar logo</button>
+                  <button class="btn sm ghost" id="btn-logo-rm" type="button">Remover logo</button>
+                </div>
+              </div>
+            </div>
+            <p class="small muted" style="margin-top:10px">Opcional: envie o logo ou qualquer imagem que quiser. O nome e a imagem aparecem no cabeçalho de todos os PDFs e nos bilhetes de rifa.</p>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Backup da sessão</h2></div>
+            <p class="small muted">Um único arquivo JSON com tudo: alunos e fotos, mapa de sala, rifas, cantina, planejamento e abonadas.</p>
+            <div class="row" style="margin-top:12px">
+              <button class="btn primary" id="btn-backup-export" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>Exportar backup</button>
+              <button class="btn" id="btn-backup-import" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0L8 7m4-4 4 4M4 17v3h16v-3"/></svg>Importar backup</button>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn ghost sm" id="btn-sample" type="button">Carregar dados de exemplo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== CARÔMETRO ===================== -->
+    <section class="view" id="view-carometro" hidden>
+      <div class="view-head">
+        <div>
+          <div class="eyebrow">Módulo 1</div>
+          <h1>Carômetro</h1>
+          <p>Envie as fotos com o nome do aluno no arquivo (ex.: <code>07 - Ana Souza.jpg</code>). O rosto é localizado e enquadrado automaticamente.</p>
+        </div>
+        <div class="row">
+          <button class="btn" id="car-import" type="button">Importar JSON</button>
+          <button class="btn" id="car-json" type="button">Exportar JSON</button>
+          <button class="btn primary" id="car-pdf" type="button">Gerar PDF</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px">
+        <div class="row" style="align-items:flex-end">
+          <label class="field" style="flex:1 1 180px"><span>Turma das fotos enviadas</span><input type="text" id="car-up-turma" list="dl-turmas" placeholder="Ex.: 6º A"></label>
+          <label class="check" style="padding-bottom:9px"><input type="checkbox" id="car-detect" checked>Detectar rosto automaticamente</label>
+          <button class="btn primary" id="car-upload" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8 5l1.5-2h5L16 5"/></svg>Enviar fotos</button>
+          <button class="btn" id="car-add" type="button">Adicionar aluno sem foto</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="car-search" placeholder="Buscar por nome ou número">
+        <select id="car-filter" aria-label="Filtrar turma"></select>
+        <select id="car-sort" aria-label="Ordenar">
+          <option value="numero">Ordenar por número</option>
+          <option value="nome">Ordenar por nome</option>
+        </select>
+        <span class="spacer"></span>
+        <button class="btn sm ghost" id="car-renum" type="button" title="Numera os alunos da turma filtrada em ordem alfabética">Renumerar em ordem alfabética</button>
+        <span class="small muted" id="car-count"></span>
+      </div>
+      <div id="car-grid"></div>
+    </section>
+
+    <!-- ===================== MAPA DE SALA ===================== -->
+    <section class="view" id="view-mapa" hidden>
+      <div class="view-head">
+        <div>
+          <div class="eyebrow">Módulo 2</div>
+          <h1>Mapa de Sala</h1>
+          <p>Arraste os alunos para as carteiras. No celular, toque no aluno e depois na carteira.</p>
+        </div>
+        <div class="row">
+          <button class="btn" id="map-import" type="button">Importar JSON</button>
+          <button class="btn" id="map-json" type="button">Exportar JSON</button>
+          <button class="btn primary" id="map-pdf" type="button">Gerar PDF</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px">
+        <div class="row" style="align-items:flex-end">
+          <label class="field" style="flex:2 1 200px"><span>Título do mapa</span><input type="text" id="map-title" placeholder="Ex.: Mapa de sala — 6º A"></label>
+          <label class="field" style="flex:1 1 140px"><span>Turma</span><select id="map-turma"></select></label>
+          <label class="field" style="width:100px"><span>Fileiras</span><input type="number" id="map-cols" min="1" max="12"></label>
+          <label class="field" style="width:150px"><span>Carteiras por fileira</span><input type="number" id="map-rows" min="1" max="12"></label>
+          <button class="btn" id="map-apply" type="button">Aplicar tamanho</button>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <span class="label">Preencher automaticamente:</span>
+          <button class="btn sm" data-fill="numero" type="button">Por número</button>
+          <button class="btn sm" data-fill="nome" type="button">Ordem alfabética</button>
+          <button class="btn sm" data-fill="random" type="button">Aleatório</button>
+          <span class="spacer"></span>
+          <label class="check small"><input type="checkbox" id="map-photos" checked>Mostrar fotos</label>
+          <button class="btn sm danger" id="map-clear" type="button">Esvaziar carteiras</button>
+        </div>
+      </div>
+      <div class="seat-layout">
+        <div class="panel" style="padding:12px">
+          <div class="panel-head" style="margin-bottom:8px"><h3>Sem lugar</h3><span class="small muted num" id="pool-count"></span></div>
+          <div class="pool" id="pool"></div>
+        </div>
+        <div class="panel classroom">
+          <div class="board">Lousa · Mesa do professor</div>
+          <div class="seats" id="seats"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== RIFAS ===================== -->
+    <section class="view" id="view-rifas" hidden>
+      <div class="view-head">
+        <div>
+          <div class="eyebrow">Módulo 3</div>
+          <h1>Rifas</h1>
+          <p>Crie a rifa, marque os números vendidos, acompanhe a arrecadação e faça o sorteio.</p>
+        </div>
+        <div class="row">
+          <button class="btn" id="rf-import" type="button">Importar JSON</button>
+          <button class="btn primary" id="rf-new" type="button">Nova rifa</button>
+        </div>
+      </div>
+      <div class="raffle-tabs" id="rf-tabs"></div>
+      <div id="rf-body"></div>
+    </section>
+
+    <!-- ===================== CANTINA ===================== -->
+    <section class="view" id="view-cantina" hidden>
+      <div class="view-head">
+        <div>
+          <div class="eyebrow">Módulo 4</div>
+          <h1>Cantina e Produtos</h1>
+          <p>Cadastre os itens, monte o carrinho e registre a venda. Os relatórios saem em PDF.</p>
+        </div>
+        <div class="row">
+          <button class="btn" id="ct-import" type="button">Importar JSON</button>
+          <button class="btn" id="ct-json" type="button">Exportar JSON</button>
+          <button class="btn" id="ct-catalog" type="button">Catálogo (PDF)</button>
+          <button class="btn primary" id="ct-new" type="button">Novo produto</button>
+        </div>
+      </div>
+      <div class="seg" id="ct-tabs" style="margin-bottom:16px">
+        <button data-tab="vender" class="on" type="button">Vender</button>
+        <button data-tab="vendas" type="button">Vendas registradas</button>
+      </div>
+      <div id="ct-vender">
+        <div class="shop">
+          <div>
+            <div class="toolbar"><input type="search" id="ct-search" placeholder="Buscar produto"></div>
+            <div id="ct-products"></div>
+          </div>
+          <div class="panel cart" id="ct-cart"></div>
+        </div>
+      </div>
+      <div id="ct-vendas" hidden></div>
+    </section>
+
+    <!-- ===================== PLANEJAMENTO ===================== -->
+    <section class="view" id="view-planejamento" hidden>
+      <div class="view-head">
+        <div>
+          <div class="eyebrow">Módulo 5</div>
+          <h1>Planejamento de Aulas</h1>
+          <p>Cadastre turmas e disciplinas e registre o plano de cada aula por data.</p>
+        </div>
+        <div class="row">
+          <button class="btn" id="pl-import" type="button">Importar JSON</button>
+          <button class="btn" id="pl-json" type="button">Exportar JSON</button>
+          <button class="btn" id="pl-pdf" type="button">Gerar PDF</button>
+          <button class="btn primary" id="pl-new" type="button">Nova aula</button>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-bottom:16px">
+        <div class="panel">
+          <div class="panel-head"><h3>Turmas</h3></div>
+          <form class="row" id="pl-turma-form" style="flex-wrap:nowrap"><input type="text" id="pl-turma-in" placeholder="Ex.: 7º B" aria-label="Nova turma"><button class="btn" type="submit">Adicionar</button></form>
+          <div class="chips" id="pl-turmas" style="margin-top:10px"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Disciplinas</h3></div>
+          <form class="row" id="pl-disc-form" style="flex-wrap:nowrap"><input type="text" id="pl-disc-in" placeholder="Ex.: Matemática" aria-label="Nova disciplina"><button class="btn" type="submit">Adicionar</button></form>
+          <div class="chips" id="pl-discs" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="seg" id="pl-mode">
+          <button data-mode="lista" class="on" type="button">Lista</button>
+          <button data-mode="calendario" type="button">Calendário</button>
+        </div>
+        <div class="row" style="gap:4px">
+          <button class="btn icon sm" id="pl-prev" type="button" aria-label="Mês anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+          <strong id="pl-month-label" style="min-width:150px;text-align:center"></strong>
+          <button class="btn icon sm" id="pl-next" type="button" aria-label="Próximo mês"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></button>
+        </div>
+        <select id="pl-f-turma" aria-label="Filtrar turma"></select>
+        <select id="pl-f-disc" aria-label="Filtrar disciplina"></select>
+        <span class="spacer"></span>
+        <span class="small muted" id="pl-count"></span>
+      </div>
+      <div id="pl-body"></div>
+    </section>
+
+    <!-- ===================== ABONADAS ===================== -->
+    <section class="view" id="view-abonadas" hidden>
+      <div class="view-head">
+        <div>
+          <div class="eyebrow">Módulo 6</div>
+          <h1>Abonadas e Substituições</h1>
+          <p>Solicitações de falta justificada dos professores, aprovação pela gestão e quem cobre cada aula.</p>
+        </div>
+        <div class="row">
+          <button class="btn" id="ab-import" type="button">Importar JSON</button>
+          <button class="btn" id="ab-json" type="button">Exportar JSON</button>
+          <button class="btn" id="ab-pdf" type="button">Relatório (PDF)</button>
+          <button class="btn primary" id="ab-new" type="button">Nova solicitação</button>
+        </div>
+      </div>
+      <div class="stats" id="ab-stats" style="margin-bottom:16px"></div>
+      <div class="toolbar">
+        <label class="inline-field"><span>De</span><input type="date" id="ab-from"></label>
+        <label class="inline-field"><span>Até</span><input type="date" id="ab-to"></label>
+        <select id="ab-status" aria-label="Filtrar status">
+          <option value="">Todos os status</option>
+          <option>Pendente</option><option>Aprovada</option><option>Rejeitada</option>
+        </select>
+        <input type="search" id="ab-search" placeholder="Buscar professor">
+        <button class="btn sm ghost" id="ab-clear-f" type="button">Limpar filtros</button>
+      </div>
+      <div id="ab-body"></div>
+    </section>
+  </main>
+</div>
+
+<datalist id="dl-turmas"></datalist>
+<datalist id="dl-profs"></datalist>
+<div id="toasts" aria-live="polite"></div>
+<div id="modal-root"></div>
+<script>
+/* =====================================================================
+   1. ESTADO EM MEMÓRIA
+   Tudo o que o sistema sabe está neste objeto. Nada é gravado em disco.
+   ===================================================================== */
+function freshState() {
+  return {
+    settings: { school: '', logo: null, logoW: 0, logoH: 0 },
+    turmas: [],           // ['6º A', ...] — compartilhadas por todos os módulos
+    disciplinas: [],      // ['Matemática', ...]
+    students: [],         // {id, name, turma, numero, photo, original, crop, detected}
+    seatMap: { title: '', turma: '', rows: 5, cols: 6, seats: Array(30).fill(null), showPhotos: true },
+    raffles: [],          // {id, name, prize, price, qty, start, date, pix, notes, numbers:[{n,sold,buyer,phone,paid}], winners:[]}
+    activeRaffleId: null,
+    products: [],         // {id, name, price, stock(null = sem controle), photo}
+    cart: [],             // {productId, qty}
+    sales: [],            // {id, seq, at, items:[{productId,name,price,qty}], total, payment, customer, received, change, canceled}
+    saleSeq: 0,
+    lessons: [],          // {id, date, turma, disciplina, aula, conteudo, objetivos, recursos, obs}
+    abonadas: []          // {id, professor, date, tipo, motivo, turmas:[], aulas, substituto, plano, status, gestao, createdAt}
+  };
+}
+let state = freshState();
+
+/* =====================================================================
+   2. UTILITÁRIOS
+   ===================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const money = v => BRL.format(Number(v) || 0).replace(/ /g, ' ');
+const collator = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true });
+const byName = (a, b) => collator.compare(a, b);
+const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const DIAS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+
+/** Converte "R$ 5,50" / "5.50" / 5.5 em número. */
+function parseMoney(v) {
+  if (typeof v === 'number') return v;
+  let s = String(v || '').replace(/[^\d,.-]/g, '');
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : n;
+}
+/** Data local de hoje em AAAA-MM-DD (sem problema de fuso). */
+function todayISO(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function parseISO(iso) { const [y, m, d] = String(iso).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); }
+function fmtDate(iso) { if (!iso) return '—'; const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}/${m}/${y}`; }
+function fmtDateTime(isoFull) { const d = new Date(isoFull); return `${fmtDate(todayISO(d))} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function fmtTime(isoFull) { const d = new Date(isoFull); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function weekday(iso) { return DIAS[parseISO(iso).getDay()]; }
+function slug(s) { return String(s || 'arquivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'arquivo'; }
+function initials(name) { const p = String(name || '?').trim().split(/\s+/).filter(w => w.length > 2 || /^[A-ZÀ-Ú]/.test(w)); return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase(); }
+/** Nome em formato "Maria da Silva". */
+function titleCase(s) {
+  const low = ['da', 'de', 'do', 'das', 'dos', 'e'];
+  return String(s).toLowerCase().split(/\s+/).filter(Boolean)
+    .map((w, i) => (i > 0 && low.includes(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+function avatarHTML(person, cls = '') {
+  return `<div class="avatar ${cls}">${person && person.photo ? `<img src="${person.photo}" alt="">` : esc(initials(person ? person.name : '?'))}</div>`;
+}
+
+/* ---------- Toasts (mensagens rápidas) ---------- */
+function toast(msg, type = 'ok', ms = 3200) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  $('#toasts').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, ms);
+}
+
+/* ---------- Modais ---------- */
+/**
+ * Abre um modal. `body` é HTML; `actions` = [{label, cls, onClick(modalEl) → false mantém aberto}].
+ * Retorna o elemento do modal para que o chamador ligue eventos.
+ */
+function openModal({ title, body, actions = [], wide = false, onClose }) {
+  const back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML = `
+    <div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <div class="modal-head"><h2>${esc(title)}</h2>
+        <button class="btn icon ghost" data-close aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="modal-body">${body}</div>
+      ${actions.length ? '<div class="modal-foot"></div>' : ''}
+    </div>`;
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); onClose && onClose(); };
+  const onKey = e => { if (e.key === 'Escape' && back.isConnected && back === $('#modal-root').lastElementChild) close(); };
+  document.addEventListener('keydown', onKey);
+  back.addEventListener('mousedown', e => { if (e.target === back) close(); });
+  $('[data-close]', back).onclick = close;
+  const foot = $('.modal-foot', back);
+  actions.forEach(a => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn ' + (a.cls || '');
+    b.textContent = a.label;
+    b.onclick = async () => { const r = await a.onClick?.(back); if (r !== false) close(); };
+    foot.appendChild(b);
+  });
+  back.close = close;
+  $('#modal-root').appendChild(back);
+  setTimeout(() => { const f = $('input:not([type=hidden]):not([type=checkbox]), select, textarea', back); f && f.focus(); }, 30);
+  return back;
+}
+/** Confirmação sem usar window.confirm(). Retorna Promise<boolean>. */
+function confirmDialog(message, { title = 'Confirmar', ok = 'Confirmar', danger = true } = {}) {
+  return new Promise(res => {
+    let answered = false;
+    openModal({
+      title, body: `<p>${message}</p>`,
+      onClose: () => { if (!answered) res(false); },
+      actions: [
+        { label: 'Cancelar', onClick: () => { answered = true; res(false); } },
+        { label: ok, cls: danger ? 'danger solid' : 'primary', onClick: () => { answered = true; res(true); } }
+      ]
+    });
+  });
+}
+/** Validação simples: marca campos vazios obrigatórios. */
+function validate(root, selectors) {
+  let ok = true;
+  selectors.forEach(sel => {
+    const el = $(sel, root);
+    const bad = !el || !String(el.value).trim();
+    el && el.classList.toggle('invalid', bad);
+    if (bad) ok = false;
+  });
+  if (!ok) toast('Preencha os campos obrigatórios destacados.', 'error');
+  return ok;
+}
+
+/* ---------- Overlay de progresso ---------- */
+const progress = {
+  el: null,
+  show(title) {
+    this.el = document.createElement('div');
+    this.el.className = 'progress-overlay';
+    this.el.innerHTML = `<div class="progress-card"><h2>${esc(title)}</h2><div class="bar"><i></i></div><p class="small muted" data-msg>Preparando…</p></div>`;
+    document.body.appendChild(this.el);
+  },
+  update(i, n, msg) { if (!this.el) return; $('.bar > i', this.el).style.width = (n ? i / n * 100 : 0) + '%'; $('[data-msg]', this.el).textContent = msg || `${i} de ${n}`; },
+  hide() { this.el && this.el.remove(); this.el = null; }
+};
+
+/* ---------- Arquivos: download e seleção ---------- */
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function exportJSON(data, filename) {
+  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), filename);
+  toast('Arquivo JSON exportado: ' + filename);
+}
+function pickFiles(accept, multiple = false) {
+  return new Promise(res => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = accept; inp.multiple = multiple;
+    inp.style.display = 'none';
+    inp.onchange = () => { res([...inp.files]); inp.remove(); };
+    document.body.appendChild(inp);
+    inp.click();
+  });
+}
+async function pickJSON() {
+  const [f] = await pickFiles('.json,application/json');
+  if (!f) return null;
+  try { return JSON.parse(await f.text()); }
+  catch { toast('O arquivo não é um JSON válido.', 'error'); return null; }
+}
+/** Junta listas por id: itens com mesmo id são substituídos, os demais adicionados. */
+function mergeById(target, incoming) {
+  let added = 0, updated = 0;
+  (incoming || []).forEach(item => {
+    if (!item || typeof item !== 'object') return;
+    if (!item.id) item.id = uid();
+    const i = target.findIndex(x => x.id === item.id);
+    if (i >= 0) { target[i] = item; updated++; } else { target.push(item); added++; }
+  });
+  return { added, updated };
+}
+
+/* =====================================================================
+   3. IMAGENS E DETECÇÃO DE ROSTO
+   ===================================================================== */
+function fileToDataURL(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+}
+function loadImg(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+/** Reduz uma imagem para que o maior lado tenha no máximo `max` px. */
+function downscale(img, max, type = 'image/jpeg', q = .9) {
+  const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+  const ctx = c.getContext('2d');
+  if (type === 'image/jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); }
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return { url: c.toDataURL(type, q), w: c.width, h: c.height };
+}
+/** Recorta `rect` da imagem e devolve JPEG no tamanho de saída pedido. */
+function cropToDataURL(img, rect, outW, outH) {
+  const c = document.createElement('canvas');
+  c.width = outW; c.height = outH;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, outW, outH);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h, 0, 0, outW, outH);
+  return c.toDataURL('image/jpeg', .88);
+}
+/** Recorte "cover" centralizado (usado em fotos de produto). */
+function coverCrop(img, outW, outH) {
+  const W = img.naturalWidth, H = img.naturalHeight, r = outW / outH;
+  let w = W, h = W / r;
+  if (h > H) { h = H; w = H * r; }
+  return cropToDataURL(img, { x: (W - w) / 2, y: (H - h) / 2, w, h }, outW, outH);
+}
+
+// Proporção do retrato do carômetro: 3 x 4 (largura x altura)
+const PHOTO_RATIO = 3 / 4;
+const PHOTO_OUT = { w: 300, h: 400 };
+
+function clampRect(r, W, H) {
+  r = { ...r };
+  if (r.w > W) { r.w = W; r.h = r.w / PHOTO_RATIO; }
+  if (r.h > H) { r.h = H; r.w = r.h * PHOTO_RATIO; }
+  r.x = clamp(r.x, 0, W - r.w); r.y = clamp(r.y, 0, H - r.h);
+  return r;
+}
+/** Enquadramento padrão quando não há rosto: maior retrato 3x4 centralizado, puxado para cima. */
+function defaultRect(W, H) {
+  let h = Math.min(H, W / PHOTO_RATIO), w = h * PHOTO_RATIO;
+  return { x: (W - w) / 2, y: (H - h) * .2, w, h };
+}
+/** A partir da caixa do rosto, monta um retrato com ombros e cabelo. */
+function rectFromFace(f, W, H) {
+  const w = f.w * 2.3, h = w / PHOTO_RATIO;
+  const cx = f.x + f.w / 2, cy = f.y + f.h / 2;
+  return clampRect({ x: cx - w / 2, y: cy - h * .42, w, h }, W, H);
+}
+
+// face-api é carregado só quando o usuário envia fotos (≈1 MB).
+const FACE_API_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js';
+const FACE_MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model/';
+let faceEngine = undefined; // undefined = não tentado; null = indisponível
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Falha ao carregar ' + src)); document.head.appendChild(s); });
+}
+async function getFaceEngine() {
+  if (faceEngine !== undefined) return faceEngine;
+  try {
+    if (!window.faceapi) await loadScript(FACE_API_URL);
+    await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+    const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: .35 });
+    faceEngine = {
+      detect: async canvas => (await faceapi.detectAllFaces(canvas, opts)).map(d => ({ x: d.box.x, y: d.box.y, w: d.box.width, h: d.box.height }))
+    };
+  } catch (err) {
+    console.warn('Detecção de rosto indisponível:', err);
+    faceEngine = null;
+    toast('Não foi possível carregar a detecção de rosto (sem internet?). As fotos serão centralizadas; ajuste o enquadramento se precisar.', 'warn', 6000);
+  }
+  return faceEngine;
+}
+/** Retorna {rect, detected} para a imagem dada (coordenadas da própria imagem). */
+async function autoFrame(img, useDetection) {
+  const W = img.naturalWidth, H = img.naturalHeight;
+  if (useDetection) {
+    const engine = await getFaceEngine();
+    if (engine) {
+      try {
+        const s = Math.min(1, 640 / Math.max(W, H));
+        const c = document.createElement('canvas');
+        c.width = Math.round(W * s); c.height = Math.round(H * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const faces = await engine.detect(c);
+        if (faces.length) {
+          const f = faces.sort((a, b) => b.w * b.h - a.w * a.h)[0];
+          return { rect: rectFromFace({ x: f.x / s, y: f.y / s, w: f.w / s, h: f.h / s }, W, H), detected: true };
+        }
+      } catch (e) { console.warn(e); }
+    }
+  }
+  return { rect: defaultRect(W, H), detected: false };
+}
+/** Desenha um avatar com iniciais (usado no PDF quando o aluno não tem foto). */
+function initialsImage(name, w = 300, h = 400) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#d9eeea'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#0f7466';
+  ctx.font = `700 ${Math.round(w * .32)}px Arial, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(initials(name), w / 2, h / 2);
+  return c.toDataURL('image/jpeg', .9);
+}
+
+/* =====================================================================
+   4. PDF (jsPDF + AutoTable)
+   ===================================================================== */
+const PDF_ACCENT = [15, 116, 102];
+const PDF_MUTED = [95, 110, 106];
+function pdfReady() {
+  if (!window.jspdf || !window.jspdf.jsPDF) { toast('A biblioteca de PDF não carregou. Verifique a conexão com a internet e recarregue.', 'error', 6000); return false; }
+  return true;
+}
+function newPdf(orientation = 'p', format = 'a4') { return new window.jspdf.jsPDF({ orientation, unit: 'mm', format }); }
+function imgFormat(dataUrl) { return /^data:image\/png/.test(dataUrl) ? 'PNG' : 'JPEG'; }
+/** Cabeçalho padrão: logo + nome da escola + título. Retorna o Y onde o conteúdo começa. */
+function pdfHeader(doc, title, subtitle) {
+  const W = doc.internal.pageSize.getWidth();
+  const M = 12;
+  let x = M;
+  const s = state.settings;
+  if (s.logo) {
+    const h = 14, w = Math.min(36, h * (s.logoW / s.logoH || 1));
+    try { doc.addImage(s.logo, imgFormat(s.logo), M, 9, w, h, 'logo'); x = M + w + 5; } catch (e) { console.warn(e); }
+  }
+  doc.setTextColor(...PDF_MUTED); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+  doc.text((s.school || 'Secretaria Escolar').toUpperCase(), x, 12.5);
+  doc.setTextColor(20, 30, 28); doc.setFontSize(15);
+  doc.text(title, x, 19);
+  if (subtitle) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...PDF_MUTED); doc.text(subtitle, x, 24); }
+  doc.setDrawColor(...PDF_ACCENT); doc.setLineWidth(.6);
+  doc.line(M, 27.5, W - M, 27.5);
+  doc.setTextColor(20, 30, 28); doc.setFont('helvetica', 'normal');
+  return 33;
+}
+/** Rodapé com data de geração e paginação em todas as páginas. */
+function pdfFooter(doc) {
+  const n = doc.getNumberOfPages();
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  const now = new Date();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...PDF_MUTED);
+    doc.text(`Gerado em ${fmtDate(todayISO(now))} às ${fmtTime(now.toISOString())}`, 12, H - 6);
+    doc.text(`Página ${i} de ${n}`, W - 12, H - 6, { align: 'right' });
+  }
+}
+function savePdf(doc, filename) {
+  pdfFooter(doc);
+  doc.save(filename);
+  toast('PDF gerado: ' + filename);
+}
+/** Ajusta a fonte para o texto caber em `maxW`; quebra em até `lines` linhas. */
+function fitText(doc, text, maxW, size, minSize = 6, lines = 2) {
+  let fs = size, parts;
+  do { doc.setFontSize(fs); parts = doc.splitTextToSize(String(text), maxW); fs -= .5; } while (parts.length > lines && fs >= minSize);
+  if (parts.length > lines) { parts = parts.slice(0, lines); parts[lines - 1] = parts[lines - 1].replace(/.{0,2}$/, '…'); }
+  return parts;
+}
+const tableStyles = {
+  styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 2, lineColor: [214, 223, 220], lineWidth: .1, textColor: [23, 33, 31] },
+  headStyles: { fillColor: PDF_ACCENT, textColor: 255, fontStyle: 'bold' },
+  alternateRowStyles: { fillColor: [244, 248, 247] },
+  margin: { left: 12, right: 12, bottom: 14 }
+};
+
+/* =====================================================================
+   5. TURMAS (compartilhadas)
+   ===================================================================== */
+function ensureTurma(t) { t = String(t || '').trim(); if (t && !state.turmas.some(x => x.toLowerCase() === t.toLowerCase())) state.turmas.push(t); }
+function ensureDisc(d) { d = String(d || '').trim(); if (d && !state.disciplinas.some(x => x.toLowerCase() === d.toLowerCase())) state.disciplinas.push(d); }
+function turmasSorted() { return [...state.turmas].sort(byName); }
+function turmaOptions(selected, allLabel) {
+  return (allLabel !== undefined ? `<option value="">${esc(allLabel)}</option>` : '') +
+    turmasSorted().map(t => `<option ${t === selected ? 'selected' : ''}>${esc(t)}</option>`).join('');
+}
+function discOptions(selected, allLabel) {
+  return (allLabel !== undefined ? `<option value="">${esc(allLabel)}</option>` : '') +
+    [...state.disciplinas].sort(byName).map(t => `<option ${t === selected ? 'selected' : ''}>${esc(t)}</option>`).join('');
+}
+</script>
+<script>
+/* =====================================================================
+   6. CARÔMETRO
+   ===================================================================== */
+const studentById = id => state.students.find(s => s.id === id);
+function sortStudents(list, mode = 'numero') {
+  const num = s => (s.numero === '' || s.numero == null || isNaN(+s.numero)) ? Infinity : +s.numero;
+  return [...list].sort((a, b) =>
+    mode === 'nome' ? byName(a.name, b.name) : (num(a) - num(b)) || byName(a.name, b.name));
+}
+/** "07 - Ana Souza.jpg" → {numero:'7', name:'Ana Souza'} */
+function parseFileName(fn) {
+  let base = fn.replace(/\.[^.]+$/, '').replace(/_+/g, ' ').trim();
+  let numero = '';
+  let m = base.match(/^(\d{1,3})\s*[-.)–]?\s+(.+)$/) || base.match(/^(\d{1,3})\s*[-.)–]\s*(.+)$/);
+  if (m) { numero = String(parseInt(m[1], 10)); base = m[2]; }
+  else if ((m = base.match(/^(.+?)\s*[-–]\s*(\d{1,3})$/))) { base = m[1]; numero = String(parseInt(m[2], 10)); }
+  base = base.replace(/\s*-\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  return { numero, name: titleCase(base) || 'Sem nome' };
+}
+
+const Car = {
+  init() {
+    $('#car-upload').onclick = () => this.upload();
+    $('#car-add').onclick = () => this.edit(null);
+    $('#car-search').oninput = e => { this.search = e.target.value; this.render(); };
+    $('#car-filter').onchange = e => { this.filter = e.target.value; this.render(); };
+    $('#car-sort').onchange = e => { this.sort = e.target.value; this.render(); };
+    $('#car-json').onclick = () => this.exportJSON();
+    $('#car-import').onclick = () => this.importJSON();
+    $('#car-pdf').onclick = () => this.pdfDialog();
+    $('#car-renum').onclick = () => this.renumber();
+    $('#car-grid').onclick = e => { const c = e.target.closest('[data-id]'); c && this.edit(c.dataset.id); };
+  },
+  filter: '', search: '', sort: 'numero',
+
+  visible() {
+    const q = this.search.trim().toLowerCase();
+    return sortStudents(state.students.filter(s =>
+      (!this.filter || s.turma === this.filter) &&
+      (!q || s.name.toLowerCase().includes(q) || String(s.numero) === q)), this.sort);
+  },
+
+  render() {
+    const f = $('#car-filter');
+    if (this.filter && !state.turmas.includes(this.filter)) this.filter = '';
+    f.innerHTML = turmaOptions(this.filter, 'Todas as turmas');
+    const list = this.visible();
+    const semFoto = state.students.filter(s => !s.photo).length;
+    $('#car-count').textContent = `${list.length} de ${state.students.length} alunos` + (semFoto ? ` · ${semFoto} sem foto` : '');
+    $('#car-renum').hidden = !this.filter;
+    const grid = $('#car-grid');
+    if (!state.students.length) {
+      grid.innerHTML = `<div class="empty"><strong>Nenhum aluno ainda</strong>Informe a turma acima e clique em <b>Enviar fotos</b>. Você pode selecionar várias fotos de uma vez.
+        <div class="row"><button class="btn primary" onclick="Car.upload()">Enviar fotos</button><button class="btn" onclick="Car.importJSON()">Importar JSON</button></div></div>`;
+      return;
+    }
+    if (!list.length) { grid.innerHTML = `<div class="empty"><strong>Nenhum aluno encontrado</strong>Ajuste a busca ou o filtro de turma.</div>`; return; }
+    // Agrupa por turma quando "Todas as turmas"
+    const groups = {};
+    list.forEach(s => (groups[s.turma || 'Sem turma'] ||= []).push(s));
+    const keys = Object.keys(groups).sort(byName);
+    grid.innerHTML = keys.map(k => `
+      ${keys.length > 1 || !this.filter ? `<div class="turma-title"><h2>${esc(k)}</h2><span class="small muted">${groups[k].length} alunos</span></div>` : ''}
+      <div class="face-grid">${groups[k].map(s => this.card(s)).join('')}</div>`).join('');
+  },
+
+  card(s) {
+    return `<button class="face-card" data-id="${s.id}" type="button" title="Editar ${esc(s.name)}">
+      <div class="face-photo">${avatarHTML(s)}
+        ${s.numero !== '' ? `<span class="face-num">${esc(s.numero)}</span>` : ''}
+        ${s.photo && s.detected === false ? `<span class="face-flag pill warn" title="Rosto não detectado: confira o enquadramento">Conferir</span>` : ''}
+      </div>
+      <div class="face-info"><strong>${esc(s.name)}</strong><span>${esc(s.turma || 'Sem turma')}${s.numero !== '' ? ' · Nº ' + esc(s.numero) : ''}</span></div>
+    </button>`;
+  },
+
+  /** Envio em lote: lê, reduz, detecta rosto e recorta cada foto. */
+  async upload() {
+    const files = (await pickFiles('image/*', true)).filter(f => /^image\//.test(f.type));
+    if (!files.length) return;
+    const turma = $('#car-up-turma').value.trim();
+    const detect = $('#car-detect').checked;
+    ensureTurma(turma);
+    progress.show('Processando fotos');
+    if (detect) { progress.update(0, files.length, 'Carregando o detector de rosto…'); await getFaceEngine(); }
+    let ok = 0, found = 0, fail = 0;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      try {
+        const img0 = await loadImg(await fileToDataURL(f));
+        const small = downscale(img0, 1200);
+        const img = await loadImg(small.url);
+        const { rect, detected } = await autoFrame(img, detect);
+        const { numero, name } = parseFileName(f.name);
+        state.students.push({ id: uid(), name, turma, numero, photo: cropToDataURL(img, rect, PHOTO_OUT.w, PHOTO_OUT.h), original: small.url, crop: rect, detected: detect ? detected : null });
+        ok++; if (detected) found++;
+      } catch (e) { console.warn('Falha na foto', f.name, e); fail++; }
+      progress.update(i + 1, files.length, `${i + 1} de ${files.length} · ${f.name}`);
+      await nextFrame();
+    }
+    progress.hide();
+    App.refresh();
+    let msg = `${ok} foto(s) adicionada(s).`;
+    if (detect) msg += ` Rosto encontrado em ${found}.`;
+    if (detect && found < ok) msg += ' As marcadas com "Conferir" podem precisar de ajuste.';
+    toast(msg, found < ok && detect ? 'warn' : 'ok', 5500);
+    if (fail) toast(`${fail} arquivo(s) não puderam ser lidos (formato não suportado, ex.: HEIC).`, 'error', 6000);
+  },
+
+  /** Modal de edição / criação de aluno. */
+  edit(id) {
+    const s = id ? studentById(id) : null;
+    const draft = s ? { ...s } : { id: uid(), name: '', turma: this.filter || $('#car-up-turma').value.trim(), numero: '', photo: null, original: null, crop: null, detected: null };
+    const m = openModal({
+      title: s ? 'Editar aluno' : 'Novo aluno',
+      body: `<div class="photo-edit">
+          <div class="stack" style="gap:8px">
+            <div class="face-photo" id="ed-photo"></div>
+            <button class="btn sm" id="ed-crop" type="button">Ajustar enquadramento</button>
+            <button class="btn sm" id="ed-change" type="button">${draft.photo ? 'Trocar foto' : 'Enviar foto'}</button>
+            <button class="btn sm ghost" id="ed-rm" type="button">Remover foto</button>
+          </div>
+          <div class="stack" style="gap:12px">
+            <label class="field"><span>Nome completo <b class="req">*</b></span><input type="text" id="ed-name" value="${esc(draft.name)}"></label>
+            <div class="grid-2">
+              <label class="field"><span>Turma</span><input type="text" id="ed-turma" list="dl-turmas" value="${esc(draft.turma)}"></label>
+              <label class="field"><span>Número</span><input type="number" id="ed-num" min="0" value="${esc(draft.numero)}"></label>
+            </div>
+          </div>
+        </div>`,
+      actions: [
+        ...(s ? [{ label: 'Excluir aluno', cls: 'danger', onClick: async () => {
+          if (!await confirmDialog(`Excluir <b>${esc(s.name)}</b> do carômetro? Ele também sai do mapa de sala.`, { ok: 'Excluir' })) return false;
+          state.students = state.students.filter(x => x.id !== s.id);
+          App.refresh(); toast('Aluno excluído.');
+        } }] : []),
+        { label: 'Cancelar' },
+        { label: 'Salvar', cls: 'primary', onClick: mm => {
+          if (!validate(mm, ['#ed-name'])) return false;
+          draft.name = $('#ed-name', mm).value.trim();
+          draft.turma = $('#ed-turma', mm).value.trim();
+          draft.numero = $('#ed-num', mm).value.trim();
+          ensureTurma(draft.turma);
+          if (s) Object.assign(s, draft); else state.students.push(draft);
+          App.refresh(); toast(s ? 'Dados do aluno atualizados.' : 'Aluno adicionado.');
+        } }
+      ]
+    });
+    const paint = () => {
+      $('#ed-photo', m).innerHTML = avatarHTML(draft);
+      $('#ed-crop', m).hidden = !draft.original;
+      $('#ed-rm', m).hidden = !draft.photo;
+      $('#ed-change', m).textContent = draft.photo ? 'Trocar foto' : 'Enviar foto';
+    };
+    paint();
+    $('#ed-change', m).onclick = async () => {
+      const [f] = await pickFiles('image/*');
+      if (!f) return;
+      try {
+        progress.show('Enquadrando foto');
+        const img0 = await loadImg(await fileToDataURL(f));
+        const small = downscale(img0, 1200);
+        const img = await loadImg(small.url);
+        const { rect, detected } = await autoFrame(img, $('#car-detect').checked);
+        Object.assign(draft, { original: small.url, crop: rect, detected, photo: cropToDataURL(img, rect, PHOTO_OUT.w, PHOTO_OUT.h) });
+        if (!$('#ed-name', m).value.trim()) $('#ed-name', m).value = parseFileName(f.name).name;
+        paint();
+      } catch { toast('Não foi possível ler esta imagem.', 'error'); }
+      finally { progress.hide(); }
+    };
+    $('#ed-rm', m).onclick = () => { Object.assign(draft, { photo: null, original: null, crop: null, detected: null }); paint(); };
+    $('#ed-crop', m).onclick = async () => {
+      const r = await cropEditor(draft.original, draft.crop);
+      if (!r) return;
+      const img = await loadImg(draft.original);
+      Object.assign(draft, { crop: r, detected: true, photo: cropToDataURL(img, r, PHOTO_OUT.w, PHOTO_OUT.h) });
+      paint();
+    };
+  },
+
+  async renumber() {
+    if (!this.filter) return;
+    const list = sortStudents(state.students.filter(s => s.turma === this.filter), 'nome');
+    if (!await confirmDialog(`Renumerar os ${list.length} alunos da turma <b>${esc(this.filter)}</b> de 1 a ${list.length}, em ordem alfabética?`, { ok: 'Renumerar', danger: false })) return;
+    list.forEach((s, i) => s.numero = String(i + 1));
+    App.refresh(); toast('Turma renumerada.');
+  },
+
+  exportJSON() {
+    if (!state.students.length) return toast('Não há alunos para exportar.', 'warn');
+    exportJSON({ tipo: 'carometro', versao: 1, exportadoEm: new Date().toISOString(), escola: state.settings.school, turmas: state.turmas, alunos: state.students }, `carometro-${todayISO()}.json`);
+  },
+  async importJSON() {
+    const d = await pickJSON(); if (!d) return;
+    const list = Array.isArray(d) ? d : (d.alunos || d.students);
+    if (!Array.isArray(list)) return toast('Este JSON não contém uma lista de alunos.', 'error');
+    const clean = list.filter(s => s && s.name).map(s => ({ id: s.id || uid(), name: String(s.name), turma: s.turma || '', numero: s.numero != null ? String(s.numero) : '', photo: s.photo || null, original: s.original || null, crop: s.crop || null, detected: s.detected ?? null }));
+    (d.turmas || []).forEach(ensureTurma);
+    clean.forEach(s => ensureTurma(s.turma));
+    const r = mergeById(state.students, clean);
+    App.refresh(); toast(`Importação concluída: ${r.added} novo(s), ${r.updated} atualizado(s).`);
+  },
+
+  pdfDialog() {
+    if (!state.students.length) return toast('Adicione alunos antes de gerar o PDF.', 'warn');
+    const m = openModal({
+      title: 'Exportar carômetro em PDF',
+      body: `<label class="field"><span>Turma</span><select id="cp-turma">${turmaOptions(this.filter, 'Todas (uma página por turma)')}</select></label>
+        <div class="grid-2">
+          <label class="field"><span>Fotos por linha</span><select id="cp-cols"><option>4</option><option selected>5</option><option>6</option><option>7</option></select></label>
+          <label class="field"><span>Ordem</span><select id="cp-sort"><option value="numero">Por número</option><option value="nome">Por nome</option></select></label>
+        </div>`,
+      actions: [{ label: 'Cancelar' }, { label: 'Gerar PDF', cls: 'primary', onClick: mm => this.pdf($('#cp-turma', mm).value, +$('#cp-cols', mm).value, $('#cp-sort', mm).value) }]
+    });
+  },
+  /** Carômetro em A4 retrato: grade de fotos 3x4, nome e número. */
+  pdf(turma, cols, sortMode) {
+    if (!pdfReady()) return false;
+    const groups = {};
+    sortStudents(state.students.filter(s => !turma || s.turma === turma), sortMode)
+      .forEach(s => (groups[s.turma || 'Sem turma'] ||= []).push(s));
+    const doc = newPdf('p');
+    const M = 12, gap = 4, usable = 210 - 2 * M;
+    const cw = (usable - gap * (cols - 1)) / cols, ph = cw * 4 / 3, nameH = 11, ch = ph + nameH;
+    let first = true;
+    Object.keys(groups).sort(byName).forEach(t => {
+      const list = groups[t];
+      const startPage = () => {
+        if (!first) doc.addPage(); first = false;
+        return pdfHeader(doc, `Carômetro · ${t}`, `${list.length} aluno(s)`);
+      };
+      let y = startPage(), col = 0;
+      list.forEach(s => {
+        if (y + ch > 297 - 12) { y = startPage(); col = 0; }
+        const x = M + col * (cw + gap);
+        const img = s.photo || initialsImage(s.name);
+        doc.addImage(img, 'JPEG', x, y, cw, ph, undefined, 'FAST');
+        doc.setDrawColor(200, 210, 207); doc.setLineWidth(.2); doc.rect(x, y, cw, ph);
+        if (s.numero !== '') {
+          doc.setFillColor(255, 255, 255); doc.roundedRect(x + 1.5, y + 1.5, 8, 5, 1, 1, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(20, 30, 28);
+          doc.text(String(s.numero), x + 5.5, y + 5, { align: 'center' });
+        }
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 30, 28);
+        const lines = fitText(doc, s.name, cw - 1, cols >= 6 ? 7.5 : 8.5, 6, 2);
+        doc.text(lines, x + cw / 2, y + ph + 3.6, { align: 'center', lineHeightFactor: 1.1 });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...PDF_MUTED);
+        doc.text(`${s.numero !== '' ? 'Nº ' + s.numero + ' · ' : ''}${s.turma || ''}`, x + cw / 2, y + ph + (lines.length > 1 ? 10.2 : 7.4), { align: 'center' });
+        col++;
+        if (col === cols) { col = 0; y += ch + gap; }
+      });
+    });
+    savePdf(doc, `carometro-${slug(turma || 'todas-as-turmas')}.pdf`);
+  }
+};
+
+/** Editor de enquadramento: arraste o retângulo e ajuste o zoom. Retorna Promise<rect|null>. */
+async function cropEditor(originalUrl, rect0) {
+  const img = await loadImg(originalUrl);
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const k = Math.min(520 / W, 400 / H, 1);
+  const cw = Math.round(W * k), chh = Math.round(H * k);
+  let r = clampRect(rect0 || defaultRect(W, H), W, H);
+  const maxW = Math.min(W, H * PHOTO_RATIO);
+  return new Promise(res => {
+    let result = null;
+    const m = openModal({
+      title: 'Ajustar enquadramento', wide: true,
+      body: `<p class="small muted">Arraste o quadro para posicionar o rosto. Use o controle de zoom (ou a roda do mouse) para aproximar.</p>
+        <div class="row" style="align-items:flex-start;gap:16px">
+          <div class="crop-stage" style="flex:1 1 300px"><canvas id="cr-c" width="${cw}" height="${chh}"></canvas></div>
+          <div class="stack" style="gap:8px;width:120px">
+            <span class="label">Resultado</span>
+            <canvas id="cr-p" width="120" height="160" style="border-radius:6px;border:1px solid var(--border);max-width:100%"></canvas>
+          </div>
+        </div>
+        <label class="field"><span>Zoom</span><input type="range" id="cr-z" min="10" max="100" value="${Math.round(r.w / maxW * 100)}"></label>`,
+      onClose: () => res(result),
+      actions: [
+        { label: 'Detectar rosto novamente', onClick: async () => { const f = await autoFrame(img, true); r = f.rect; $('#cr-z', m).value = Math.round(r.w / maxW * 100); draw(); toast(f.detected ? 'Rosto encontrado.' : 'Nenhum rosto encontrado; ajuste manualmente.', f.detected ? 'ok' : 'warn'); return false; } },
+        { label: 'Cancelar' },
+        { label: 'Aplicar', cls: 'primary', onClick: () => { result = r; } }
+      ]
+    });
+    const c = $('#cr-c', m), ctx = c.getContext('2d'), pc = $('#cr-p', m), pctx = pc.getContext('2d');
+    function draw() {
+      ctx.clearRect(0, 0, cw, chh);
+      ctx.drawImage(img, 0, 0, cw, chh);
+      ctx.fillStyle = 'rgba(0,0,0,.55)';
+      ctx.beginPath(); ctx.rect(0, 0, cw, chh); ctx.rect(r.x * k, r.y * k, r.w * k, r.h * k); ctx.fill('evenodd');
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(r.x * k, r.y * k, r.w * k, r.h * k);
+      ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.6)';
+      ctx.beginPath(); ctx.ellipse((r.x + r.w / 2) * k, (r.y + r.h * .42) * k, r.w * k * .22, r.h * k * .2, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      pctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, 120, 160);
+    }
+    const toImg = e => { const b = c.getBoundingClientRect(); return { x: (e.clientX - b.left) * (cw / b.width) / k, y: (e.clientY - b.top) * (chh / b.height) / k }; };
+    let drag = null;
+    c.addEventListener('pointerdown', e => { const p = toImg(e); drag = { dx: p.x - r.x, dy: p.y - r.y }; if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) drag = { dx: r.w / 2, dy: r.h / 2 }; c.setPointerCapture(e.pointerId); move(e); });
+    const move = e => { if (!drag) return; const p = toImg(e); r = clampRect({ ...r, x: p.x - drag.dx, y: p.y - drag.dy }, W, H); draw(); };
+    c.addEventListener('pointermove', move);
+    c.addEventListener('pointerup', () => drag = null);
+    const zoom = v => {
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2, w = maxW * clamp(v, 10, 100) / 100, h = w / PHOTO_RATIO;
+      r = clampRect({ x: cx - w / 2, y: cy - h / 2, w, h }, W, H); draw();
+    };
+    $('#cr-z', m).oninput = e => zoom(+e.target.value);
+    c.addEventListener('wheel', e => { e.preventDefault(); const z = $('#cr-z', m); z.value = clamp(+z.value + (e.deltaY > 0 ? 4 : -4), 10, 100); zoom(+z.value); }, { passive: false });
+    draw();
+  });
+}
+
+/* =====================================================================
+   7. MAPA DE SALA
+   ===================================================================== */
+const SeatMap = {
+  selected: null,   // seleção por toque: {from:'pool'|'seat', id, index}
+  dragData: null,
+
+  init() {
+    const sm = () => state.seatMap;
+    $('#map-title').oninput = e => sm().title = e.target.value;
+    $('#map-turma').onchange = e => { sm().turma = e.target.value; if (!sm().title || /^Mapa de sala/.test(sm().title)) { sm().title = 'Mapa de sala' + (e.target.value ? ' — ' + e.target.value : ''); } this.render(); };
+    $('#map-apply').onclick = () => this.resize(+$('#map-rows').value, +$('#map-cols').value);
+    $('#map-photos').onchange = e => { sm().showPhotos = e.target.checked; this.render(); };
+    $('#map-clear').onclick = async () => { if (await confirmDialog('Tirar todos os alunos das carteiras?', { ok: 'Esvaziar' })) { sm().seats = sm().seats.map(() => null); this.render(); } };
+    $$('[data-fill]').forEach(b => b.onclick = () => this.autoFill(b.dataset.fill));
+    $('#map-json').onclick = () => this.exportJSON();
+    $('#map-import').onclick = () => this.importJSON();
+    $('#map-pdf').onclick = () => this.pdf();
+
+    // ----- Arrastar e soltar (delegação de eventos) -----
+    const root = $('#view-mapa');
+    root.addEventListener('dragstart', e => {
+      const el = e.target.closest('[data-drag]'); if (!el) return;
+      this.dragData = JSON.parse(el.dataset.drag);
+      e.dataTransfer.setData('text/plain', el.dataset.drag);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    root.addEventListener('dragend', () => { this.dragData = null; $$('.drag-over', root).forEach(x => x.classList.remove('drag-over')); });
+    root.addEventListener('dragover', e => {
+      const t = e.target.closest('.seat, .pool'); if (!t || !this.dragData) return;
+      e.preventDefault(); $$('.drag-over', root).forEach(x => x !== t && x.classList.remove('drag-over')); t.classList.add('drag-over');
+    });
+    root.addEventListener('dragleave', e => { const t = e.target.closest('.seat, .pool'); if (t && !t.contains(e.relatedTarget)) t.classList.remove('drag-over'); });
+    root.addEventListener('drop', e => {
+      const t = e.target.closest('.seat, .pool'); if (!t || !this.dragData) return;
+      e.preventDefault();
+      if (t.classList.contains('seat')) this.place(this.dragData, +t.dataset.index); else this.unseat(this.dragData);
+      this.dragData = null;
+    });
+    // ----- Toque / clique (alternativa ao arrastar, funciona no celular) -----
+    root.addEventListener('click', e => {
+      const x = e.target.closest('.x');
+      if (x) { e.stopPropagation(); state.seatMap.seats[+x.dataset.index] = null; this.selected = null; this.render(); return; }
+      const chip = e.target.closest('.stud-chip');
+      if (chip) { const d = JSON.parse(chip.dataset.drag); this.selected = (this.selected && this.selected.id === d.id) ? null : d; this.render(); return; }
+      const seat = e.target.closest('.seat');
+      if (seat) {
+        const idx = +seat.dataset.index;
+        if (this.selected) { this.place(this.selected, idx); this.selected = null; this.render(); }
+        else if (state.seatMap.seats[idx]) { this.selected = { from: 'seat', id: state.seatMap.seats[idx], index: idx }; this.render(); }
+        return;
+      }
+      const pool = e.target.closest('.pool');
+      if (pool && this.selected && this.selected.from === 'seat') { this.unseat(this.selected); this.selected = null; this.render(); }
+    });
+  },
+
+  place(src, idx) {
+    const seats = state.seatMap.seats;
+    if (src.from === 'pool') {
+      const prev = seats.indexOf(src.id); if (prev >= 0) seats[prev] = null;
+      seats[idx] = src.id;
+    } else if (src.from === 'seat' && src.index !== idx) {
+      [seats[idx], seats[src.index]] = [seats[src.index], seats[idx]];
+    }
+    this.render();
+  },
+  unseat(src) { if (src.from === 'seat') { state.seatMap.seats[src.index] = null; this.render(); } },
+
+  resize(rows, cols) {
+    const sm = state.seatMap;
+    if (!(rows >= 1 && rows <= 12 && cols >= 1 && cols <= 12)) return toast('Use de 1 a 12 fileiras e de 1 a 12 carteiras por fileira.', 'error');
+    const seats = Array(rows * cols).fill(null);
+    let lost = 0;
+    sm.seats.forEach((id, i) => {
+      if (!id) return;
+      const r = Math.floor(i / sm.cols), c = i % sm.cols;
+      if (r < rows && c < cols) seats[r * cols + c] = id; else lost++;
+    });
+    Object.assign(sm, { rows, cols, seats });
+    this.render();
+    toast(`Sala com ${rows * cols} carteiras.` + (lost ? ` ${lost} aluno(s) voltaram para "Sem lugar".` : ''), lost ? 'warn' : 'ok');
+  },
+
+  candidates() { const t = state.seatMap.turma; return state.students.filter(s => !t || s.turma === t); },
+
+  autoFill(mode) {
+    const sm = state.seatMap;
+    let list = this.candidates();
+    if (!list.length) return toast('Não há alunos nesta turma. Cadastre-os no Carômetro.', 'warn');
+    if (mode === 'random') { list = [...list]; for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } }
+    else list = sortStudents(list, mode);
+    sm.seats = sm.seats.map(() => null);
+    // Preenche pela frente: fileira a fileira, da esquerda para a direita
+    list.slice(0, sm.seats.length).forEach((s, i) => sm.seats[i] = s.id);
+    this.render();
+    if (list.length > sm.seats.length) toast(`Faltam ${list.length - sm.seats.length} carteira(s). Aumente o tamanho da sala.`, 'warn');
+    else toast('Carteiras preenchidas.');
+  },
+
+  render() {
+    const sm = state.seatMap;
+    sm.seats = sm.seats.map(id => (id && studentById(id)) ? id : null); // remove alunos excluídos
+    if (sm.turma && !state.turmas.includes(sm.turma)) sm.turma = '';
+    $('#map-title').value = sm.title;
+    $('#map-turma').innerHTML = turmaOptions(sm.turma, 'Todos os alunos');
+    $('#map-rows').value = sm.rows; $('#map-cols').value = sm.cols;
+    $('#map-photos').checked = sm.showPhotos;
+    const seated = new Set(sm.seats.filter(Boolean));
+    const pool = sortStudents(this.candidates().filter(s => !seated.has(s.id)), 'numero');
+    $('#pool-count').textContent = pool.length;
+    const sel = this.selected;
+    $('#pool').innerHTML = pool.length ? pool.map(s => `
+      <div class="stud-chip ${sel && sel.id === s.id ? 'selected' : ''}" draggable="true" data-drag='${esc(JSON.stringify({ from: 'pool', id: s.id }))}'>
+        ${avatarHTML(s)}<span>${s.numero !== '' ? `<b class="num">${esc(s.numero)}</b> · ` : ''}${esc(s.name)}</span></div>`).join('')
+      : `<p class="small muted" style="padding:8px">${state.students.length ? 'Todos os alunos estão sentados.' : 'Cadastre alunos no Carômetro para montar o mapa.'}</p>`;
+    const seatsEl = $('#seats');
+    seatsEl.style.gridTemplateColumns = `repeat(${sm.cols}, 108px)`;
+    // Rótulo: F = fileira (coluna da esquerda p/ a direita), número = posição da frente p/ o fundo
+    seatsEl.innerHTML = sm.seats.map((id, i) => {
+      const r = Math.floor(i / sm.cols) + 1, c = i % sm.cols + 1;
+      const s = id && studentById(id);
+      const isSel = sel && sel.from === 'seat' && sel.index === i;
+      return s
+        ? `<div class="seat filled ${isSel ? 'selected' : ''}" data-index="${i}" draggable="true" data-drag='${esc(JSON.stringify({ from: 'seat', id: s.id, index: i }))}'>
+            <span class="pos">F${c}·${r}</span><button class="x" data-index="${i}" type="button" aria-label="Tirar da carteira">×</button>
+            ${sm.showPhotos ? avatarHTML(s) : ''}<span class="nm">${esc(s.name)}</span>${s.numero !== '' ? `<span class="small muted">Nº ${esc(s.numero)}</span>` : ''}</div>`
+        : `<div class="seat" data-index="${i}"><span class="pos">F${c}·${r}</span><span class="empty-lbl">${sel ? 'Toque para colocar' : 'Livre'}</span></div>`;
+    }).join('');
+  },
+
+  exportJSON() {
+    const sm = state.seatMap;
+    const seats = sm.seats.map((id, i) => {
+      const s = id && studentById(id);
+      return s ? { indice: i, fileira: i % sm.cols + 1, posicao: Math.floor(i / sm.cols) + 1, aluno: { id: s.id, name: s.name, turma: s.turma, numero: s.numero, photo: s.photo } } : null;
+    });
+    exportJSON({ tipo: 'mapa-de-sala', versao: 1, exportadoEm: new Date().toISOString(), title: sm.title, turma: sm.turma, rows: sm.rows, cols: sm.cols, showPhotos: sm.showPhotos, seats }, `${slug(sm.title || 'mapa de sala ' + sm.turma)}.json`);
+  },
+  /** Importa um mapa: alunos que não existirem no carômetro são recriados a partir do JSON. */
+  async importJSON() {
+    const d = await pickJSON(); if (!d) return;
+    if (!d.rows || !d.cols || !Array.isArray(d.seats)) return toast('Este JSON não é um mapa de sala.', 'error');
+    const rows = clamp(+d.rows, 1, 12), cols = clamp(+d.cols, 1, 12);
+    const seats = Array(rows * cols).fill(null);
+    let created = 0;
+    d.seats.forEach((cell, i) => {
+      if (!cell || !cell.aluno) return;
+      const a = cell.aluno;
+      let s = studentById(a.id) || state.students.find(x => x.name === a.name && (x.turma || '') === (a.turma || ''));
+      if (!s) { s = { id: a.id || uid(), name: a.name || 'Sem nome', turma: a.turma || '', numero: a.numero ?? '', photo: a.photo || null, original: null, crop: null, detected: null }; state.students.push(s); ensureTurma(s.turma); created++; }
+      const idx = cell.indice ?? i;
+      if (idx < seats.length) seats[idx] = s.id;
+    });
+    ensureTurma(d.turma);
+    state.seatMap = { title: d.title || '', turma: d.turma || '', rows, cols, seats, showPhotos: d.showPhotos !== false };
+    App.refresh();
+    toast('Mapa de sala importado.' + (created ? ` ${created} aluno(s) adicionados ao carômetro.` : ''));
+  },
+
+  /** PDF em A4 paisagem com a lousa no topo. */
+  pdf() {
+    if (!pdfReady()) return;
+    const sm = state.seatMap;
+    if (!sm.seats.some(Boolean)) return toast('Coloque ao menos um aluno nas carteiras.', 'warn');
+    const doc = newPdf('l');
+    const y0 = pdfHeader(doc, sm.title || 'Mapa de sala', `${sm.turma ? 'Turma ' + sm.turma + ' · ' : ''}${sm.seats.filter(Boolean).length} alunos · ${sm.cols} fileiras`);
+    const M = 12, W = 297 - 2 * M;
+    doc.setFillColor(...PDF_ACCENT); doc.roundedRect(M, y0, W, 7, 1.5, 1.5, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.text('LOUSA  ·  MESA DO PROFESSOR', 297 / 2, y0 + 4.8, { align: 'center' });
+    const top = y0 + 11, gap = 3, availH = 210 - 14 - top;
+    const cw = (W - gap * (sm.cols - 1)) / sm.cols, chh = Math.min(40, (availH - gap * (sm.rows - 1)) / sm.rows);
+    const left = M + (W - (cw * sm.cols + gap * (sm.cols - 1))) / 2;
+    sm.seats.forEach((id, i) => {
+      const r = Math.floor(i / sm.cols), c = i % sm.cols;
+      const x = left + c * (cw + gap), y = top + r * (chh + gap);
+      const s = id && studentById(id);
+      doc.setLineWidth(.25);
+      if (!s) { doc.setDrawColor(190, 200, 197); doc.setLineDashPattern([1, 1], 0); doc.roundedRect(x, y, cw, chh, 1.5, 1.5); doc.setLineDashPattern([], 0); }
+      else { doc.setDrawColor(120, 135, 131); doc.setFillColor(255, 255, 255); doc.roundedRect(x, y, cw, chh, 1.5, 1.5, 'FD'); }
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...PDF_MUTED);
+      doc.text(`F${c + 1}·${r + 1}`, x + 1.3, y + 2.6);
+      if (!s) return;
+      let ty = y + chh / 2;
+      const photoH = sm.showPhotos ? Math.min(chh - 11, (cw - 4) * 4 / 3) : 0;
+      if (photoH >= 8) {
+        const pw = photoH * 3 / 4;
+        doc.addImage(s.photo || initialsImage(s.name), 'JPEG', x + (cw - pw) / 2, y + 3, pw, photoH, undefined, 'FAST');
+        ty = y + 3 + photoH + 3.2;
+      } else ty = y + chh / 2 - 1;
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 30, 28);
+      const lines = fitText(doc, s.name, cw - 2, 7.5, 5, 2);
+      doc.text(lines, x + cw / 2, ty, { align: 'center', lineHeightFactor: 1.05 });
+      if (s.numero !== '') { doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(...PDF_MUTED); doc.text('Nº ' + s.numero, x + cw - 1.3, y + 2.6, { align: 'right' }); }
+    });
+    savePdf(doc, `${slug(sm.title || 'mapa de sala ' + sm.turma)}.pdf`);
+  }
+};
+</script>
+<script>
+/* =====================================================================
+   8. RIFAS
+   ===================================================================== */
+const Rifa = {
+  filter: 'todos', search: '', multi: false, sel: new Set(),
+
+  active() {
+    let r = state.raffles.find(x => x.id === state.activeRaffleId);
+    if (!r && state.raffles.length) { r = state.raffles[0]; state.activeRaffleId = r.id; }
+    return r || null;
+  },
+  pad(r, n) { return String(n).padStart(Math.max(2, String(r.start + r.qty - 1).length), '0'); },
+  stats(r) {
+    const sold = r.numbers.filter(n => n.sold), paid = sold.filter(n => n.paid);
+    return { sold: sold.length, free: r.qty - sold.length, paid: paid.length, total: sold.length * r.price, received: paid.length * r.price, pending: (sold.length - paid.length) * r.price };
+  },
+
+  init() {
+    $('#rf-new').onclick = () => this.form(null);
+    $('#rf-import').onclick = () => this.importJSON();
+    $('#rf-tabs').onclick = e => { const b = e.target.closest('[data-id]'); if (b) { state.activeRaffleId = b.dataset.id; this.sel.clear(); this.render(); } };
+    $('#rf-body').addEventListener('click', e => {
+      const r = this.active(); if (!r) return;
+      const nb = e.target.closest('.nbtn');
+      if (nb) {
+        const num = r.numbers.find(x => x.n === +nb.dataset.n);
+        if (this.multi && !num.sold) { this.sel.has(num.n) ? this.sel.delete(num.n) : this.sel.add(num.n); this.render(); }
+        else this.sell(r, [num]);
+        return;
+      }
+      const act = e.target.closest('[data-act]'); if (!act) return;
+      const a = act.dataset.act;
+      if (a === 'edit') this.form(r);
+      if (a === 'draw') this.draw(r);
+      if (a === 'pdf') this.pdfList(r);
+      if (a === 'tickets') this.ticketsDialog(r);
+      if (a === 'json') exportJSON({ tipo: 'rifa', versao: 1, exportadoEm: new Date().toISOString(), rifas: [r] }, `rifa-${slug(r.name)}.json`);
+      if (a === 'del') this.remove(r);
+      if (a === 'sell-sel') this.sell(r, r.numbers.filter(n => this.sel.has(n.n)));
+      if (a === 'clear-win') { r.winners = []; this.render(); }
+    });
+    $('#rf-body').addEventListener('input', e => {
+      if (e.target.id === 'rf-search') { this.search = e.target.value; this.renderNumbers(); }
+    });
+    $('#rf-body').addEventListener('change', e => {
+      if (e.target.id === 'rf-multi') { this.multi = e.target.checked; this.sel.clear(); this.render(); }
+    });
+  },
+
+  /** Criar ou editar rifa. */
+  form(r) {
+    const isNew = !r;
+    openModal({
+      title: isNew ? 'Nova rifa' : 'Editar rifa',
+      body: `<label class="field"><span>Nome da rifa <b class="req">*</b></span><input type="text" id="rf-name" value="${esc(r?.name || '')}" placeholder="Ex.: Rifa da Festa Junina"></label>
+        <label class="field"><span>Prêmio <b class="req">*</b></span><input type="text" id="rf-prize" value="${esc(r?.prize || '')}" placeholder="Ex.: Cesta de chocolates"></label>
+        <div class="grid-3">
+          <label class="field"><span>Valor do número <b class="req">*</b></span><input type="text" inputmode="decimal" id="rf-price" value="${r ? String(r.price).replace('.', ',') : '5,00'}"></label>
+          <label class="field"><span>Quantidade <b class="req">*</b></span><input type="number" id="rf-qty" min="1" max="10000" value="${r?.qty || 100}"></label>
+          <label class="field"><span>Primeiro número</span><input type="number" id="rf-start" min="0" value="${r?.start ?? 1}" ${isNew ? '' : 'disabled'}></label>
+        </div>
+        <div class="grid-2">
+          <label class="field"><span>Data do sorteio</span><input type="date" id="rf-date" value="${esc(r?.date || '')}"></label>
+          <label class="field"><span>Chave Pix (opcional)</span><input type="text" id="rf-pix" value="${esc(r?.pix || '')}" placeholder="Celular, e-mail ou CNPJ"></label>
+        </div>
+        <label class="field"><span>Observações</span><textarea id="rf-notes" rows="2">${esc(r?.notes || '')}</textarea></label>
+        ${isNew ? '' : '<p class="small muted">A quantidade só pode aumentar, para não apagar números vendidos.</p>'}`,
+      actions: [{ label: 'Cancelar' }, {
+        label: isNew ? 'Criar rifa' : 'Salvar', cls: 'primary', onClick: m => {
+          if (!validate(m, ['#rf-name', '#rf-prize', '#rf-price', '#rf-qty'])) return false;
+          const price = parseMoney($('#rf-price', m).value), qty = parseInt($('#rf-qty', m).value, 10), start = parseInt($('#rf-start', m).value, 10) || 0;
+          if (!(price > 0)) { $('#rf-price', m).classList.add('invalid'); toast('Informe um valor válido, ex.: 5,00.', 'error'); return false; }
+          if (!(qty >= 1 && qty <= 10000)) { $('#rf-qty', m).classList.add('invalid'); toast('A quantidade deve estar entre 1 e 10.000.', 'error'); return false; }
+          if (!isNew && qty < r.qty) { $('#rf-qty', m).classList.add('invalid'); toast(`A quantidade não pode ser menor que ${r.qty}.`, 'error'); return false; }
+          const data = { name: $('#rf-name', m).value.trim(), prize: $('#rf-prize', m).value.trim(), price, date: $('#rf-date', m).value, pix: $('#rf-pix', m).value.trim(), notes: $('#rf-notes', m).value.trim() };
+          if (isNew) {
+            const nr = { id: uid(), ...data, qty, start, winners: [], createdAt: new Date().toISOString(), numbers: Array.from({ length: qty }, (_, i) => ({ n: start + i, sold: false, buyer: '', phone: '', paid: false })) };
+            state.raffles.push(nr); state.activeRaffleId = nr.id;
+            toast(`Rifa criada com ${qty} números.`);
+          } else {
+            Object.assign(r, data);
+            for (let i = r.qty; i < qty; i++) r.numbers.push({ n: r.start + i, sold: false, buyer: '', phone: '', paid: false });
+            r.qty = qty; toast('Rifa atualizada.');
+          }
+          App.refresh();
+        }
+      }]
+    });
+  },
+
+  async remove(r) {
+    if (!await confirmDialog(`Excluir a rifa <b>${esc(r.name)}</b> e todos os ${this.stats(r).sold} números vendidos?`, { ok: 'Excluir rifa' })) return;
+    state.raffles = state.raffles.filter(x => x.id !== r.id);
+    state.activeRaffleId = null; App.refresh(); toast('Rifa excluída.');
+  },
+
+  /** Marca um ou vários números como vendidos. */
+  sell(r, nums) {
+    if (!nums.length) return;
+    const one = nums.length === 1 ? nums[0] : null;
+    const buyers = [...new Map(r.numbers.filter(n => n.sold).map(n => [n.buyer, n.phone])).entries()];
+    const label = nums.map(n => this.pad(r, n.n)).join(', ');
+    const m = openModal({
+      title: one ? `Número ${this.pad(r, one.n)}` : `Vender ${nums.length} números`,
+      body: `${one ? '' : `<p class="small muted">Números: <b class="num">${esc(label)}</b> · Total ${money(nums.length * r.price)}</p>`}
+        <label class="field"><span>Nome do comprador <b class="req">*</b></span><input type="text" id="sl-buyer" list="dl-buyers" value="${esc(one?.buyer || '')}"></label>
+        <datalist id="dl-buyers">${buyers.map(([b]) => `<option value="${esc(b)}">`).join('')}</datalist>
+        <label class="field"><span>Telefone</span><input type="tel" id="sl-phone" value="${esc(one?.phone || '')}" placeholder="(00) 00000-0000"></label>
+        <label class="check"><input type="checkbox" id="sl-paid" ${one ? (one.sold ? (one.paid ? 'checked' : '') : 'checked') : 'checked'}>Pagamento recebido</label>`,
+      actions: [
+        ...(one && one.sold ? [{ label: 'Liberar número', cls: 'danger', onClick: () => { Object.assign(one, { sold: false, buyer: '', phone: '', paid: false }); App.refresh(); toast(`Número ${this.pad(r, one.n)} disponível novamente.`); } }] : []),
+        { label: 'Cancelar' },
+        { label: one && one.sold ? 'Salvar' : 'Marcar como vendido', cls: 'primary', onClick: mm => {
+          if (!validate(mm, ['#sl-buyer'])) return false;
+          const buyer = $('#sl-buyer', mm).value.trim(), phone = $('#sl-phone', mm).value.trim(), paid = $('#sl-paid', mm).checked;
+          nums.forEach(n => Object.assign(n, { sold: true, buyer, phone, paid }));
+          this.sel.clear(); App.refresh();
+          toast(nums.length > 1 ? `${nums.length} números vendidos para ${buyer}.` : `Número ${this.pad(r, nums[0].n)} vendido para ${buyer}.`);
+        } }
+      ]
+    });
+    // Ao escolher um comprador já cadastrado, preenche o telefone
+    $('#sl-buyer', m).addEventListener('change', e => { const f = buyers.find(([b]) => b === e.target.value); if (f && !$('#sl-phone', m).value) $('#sl-phone', m).value = f[1]; });
+  },
+
+  /** Sorteio com animação; usa crypto.getRandomValues para aleatoriedade. */
+  draw(r) {
+    const rand = max => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % max; };
+    const m = openModal({
+      title: 'Sorteio · ' + r.name,
+      body: `<div class="draw-display"><div class="big num" id="dr-n">--</div><div class="who" id="dr-who">Pronto para sortear</div></div>
+        <label class="check"><input type="checkbox" id="dr-all">Incluir números não vendidos</label>
+        <p class="small muted" id="dr-info"></p>`,
+      actions: [{ label: 'Fechar' }, { label: 'Sortear', cls: 'primary', onClick: mm => { go(mm); return false; } }]
+    });
+    const won = new Set((r.winners || []).map(w => w.n));
+    const pool = () => r.numbers.filter(n => ($('#dr-all', m).checked || n.sold) && !won.has(n.n));
+    const info = () => $('#dr-info', m).textContent = `${pool().length} número(s) concorrendo${won.size ? ` · ${won.size} já sorteado(s) ficam de fora` : ''}.`;
+    $('#dr-all', m).onchange = info; info();
+    let running = false;
+    const go = mm => {
+      if (running) return;
+      const p = pool();
+      if (!p.length) return toast('Nenhum número vendido para sortear. Marque "Incluir números não vendidos" ou venda números.', 'warn', 5000);
+      running = true;
+      const btn = $$('.modal-foot .btn', mm).pop(); btn.disabled = true;
+      $('#dr-who', mm).textContent = 'Sorteando…';
+      const t0 = performance.now();
+      const tick = () => {
+        $('#dr-n', mm).textContent = this.pad(r, p[rand(p.length)].n);
+        if (performance.now() - t0 < 2200) return setTimeout(tick, 60 + (performance.now() - t0) / 30);
+        const w = p[rand(p.length)];
+        r.winners = r.winners || [];
+        r.winners.push({ n: w.n, buyer: w.sold ? w.buyer : '', phone: w.phone || '', at: new Date().toISOString() });
+        won.add(w.n);
+        $('#dr-n', mm).textContent = this.pad(r, w.n);
+        $('#dr-who', mm).textContent = w.sold ? `${r.winners.length}º sorteado: ${w.buyer}` : `${r.winners.length}º sorteado: número não vendido`;
+        running = false; btn.disabled = false; btn.textContent = 'Sortear outro'; info();
+        this.render();
+      };
+      tick();
+    };
+  },
+
+  render() {
+    const r = this.active();
+    $('#rf-tabs').innerHTML = state.raffles.map(x => `<button class="raffle-tab ${r && x.id === r.id ? 'on' : ''}" data-id="${x.id}" type="button">${esc(x.name)}</button>`).join('');
+    if (!r) {
+      $('#rf-body').innerHTML = `<div class="empty"><strong>Nenhuma rifa criada</strong>Defina o nome, o prêmio, o valor e a quantidade de números. Os números são gerados automaticamente.
+        <div class="row"><button class="btn primary" onclick="Rifa.form(null)">Criar rifa</button></div></div>`;
+      return;
+    }
+    const s = this.stats(r), pct = r.qty ? s.sold / r.qty * 100 : 0;
+    $('#rf-body').innerHTML = `
+      <div class="panel">
+        <div class="panel-head">
+          <div><h2>${esc(r.name)}</h2><p class="small muted">Prêmio: <b>${esc(r.prize)}</b> · ${money(r.price)} por número${r.date ? ' · Sorteio em ' + fmtDate(r.date) : ''}${r.pix ? ' · Pix: ' + esc(r.pix) : ''}</p></div>
+          <div class="row">
+            <button class="btn sm" data-act="edit" type="button">Editar</button>
+            <button class="btn sm" data-act="json" type="button">JSON</button>
+            <button class="btn sm" data-act="tickets" type="button">Bilhetes (PDF)</button>
+            <button class="btn sm" data-act="pdf" type="button">Lista (PDF)</button>
+            <button class="btn sm primary" data-act="draw" type="button">Sortear</button>
+            <button class="btn sm ghost danger" data-act="del" type="button">Excluir</button>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k">Vendidos</div><div class="v">${s.sold}<span class="muted" style="font-size:.9rem"> / ${r.qty}</span></div><div class="s">${pct.toFixed(0)}% da rifa</div></div>
+          <div class="stat"><div class="k">Disponíveis</div><div class="v">${s.free}</div><div class="s">números livres</div></div>
+          <div class="stat"><div class="k">Arrecadado</div><div class="v">${money(s.received)}</div><div class="s">de ${money(s.total)} vendidos</div></div>
+          <div class="stat"><div class="k">A receber</div><div class="v" style="color:${s.pending ? 'var(--warn)' : 'inherit'}">${money(s.pending)}</div><div class="s">${s.sold - s.paid} número(s) sem pagamento</div></div>
+        </div>
+        <div class="meter" style="margin-top:14px" title="${pct.toFixed(1)}% vendido"><i style="width:${pct}%"></i></div>
+      </div>
+      ${r.winners && r.winners.length ? `<div class="panel"><div class="panel-head"><h3>Resultado do sorteio</h3><button class="btn sm ghost" data-act="clear-win" type="button">Limpar resultado</button></div>
+        <div class="chips">${r.winners.map((w, i) => `<span class="chip pick on">${i + 1}º · Nº ${this.pad(r, w.n)} · ${esc(w.buyer || 'não vendido')}</span>`).join('')}</div></div>` : ''}
+      <div class="panel">
+        <div class="toolbar">
+          <div class="seg" id="rf-filter">
+            ${[['todos', 'Todos'], ['livres', 'Disponíveis'], ['vendidos', 'Vendidos'], ['pendentes', 'Sem pagamento']].map(([k, l]) => `<button type="button" data-f="${k}" class="${this.filter === k ? 'on' : ''}">${l}</button>`).join('')}
+          </div>
+          <input type="search" id="rf-search" placeholder="Número ou comprador" value="${esc(this.search)}">
+          <label class="check small"><input type="checkbox" id="rf-multi" ${this.multi ? 'checked' : ''}>Vender vários de uma vez</label>
+          ${this.multi ? `<button class="btn sm primary" data-act="sell-sel" type="button" ${this.sel.size ? '' : 'disabled'}>Vender ${this.sel.size} selecionado(s)</button>` : ''}
+        </div>
+        <div class="legend" style="margin-bottom:10px"><span><i></i>Disponível</span><span><i style="background:var(--ok-soft);border-color:var(--ok)"></i>Vendido e pago</span><span><i style="background:var(--warn-soft);border-color:var(--warn)"></i>Vendido, falta pagar</span><span><i style="background:var(--info)"></i>Sorteado</span></div>
+        <div class="numbers" id="rf-numbers"></div>
+      </div>
+      ${this.buyersTable(r)}`;
+    $$('#rf-filter button').forEach(b => b.onclick = () => { this.filter = b.dataset.f; this.render(); });
+    this.renderNumbers();
+  },
+  renderNumbers() {
+    const r = this.active(); if (!r) return;
+    const q = this.search.trim().toLowerCase();
+    const won = new Set((r.winners || []).map(w => w.n));
+    const list = r.numbers.filter(n =>
+      (this.filter === 'todos' || (this.filter === 'livres' && !n.sold) || (this.filter === 'vendidos' && n.sold) || (this.filter === 'pendentes' && n.sold && !n.paid)) &&
+      (!q || String(n.n) === q.replace(/^0+(?=\d)/, '') || this.pad(r, n.n).includes(q) || n.buyer.toLowerCase().includes(q)));
+    $('#rf-numbers').innerHTML = list.length ? list.map(n =>
+      `<button type="button" class="nbtn ${n.sold ? 'sold' : ''} ${n.sold && !n.paid ? 'unpaid' : ''} ${won.has(n.n) ? 'win' : ''} ${this.sel.has(n.n) ? 'sel' : ''}" data-n="${n.n}" title="${n.sold ? esc(n.buyer) + (n.paid ? ' · pago' : ' · falta pagar') : 'Disponível'}">${this.pad(r, n.n)}</button>`).join('')
+      : '<p class="muted small">Nenhum número neste filtro.</p>';
+  },
+  /** Agrupa os números vendidos por comprador. */
+  groupBuyers(r) {
+    const g = new Map();
+    r.numbers.filter(n => n.sold).forEach(n => {
+      const k = n.buyer.trim().toLowerCase();
+      if (!g.has(k)) g.set(k, { buyer: n.buyer, phone: n.phone, nums: [], unpaid: 0 });
+      const o = g.get(k); o.nums.push(n.n); if (!n.paid) o.unpaid++; if (!o.phone) o.phone = n.phone;
+    });
+    return [...g.values()].sort((a, b) => byName(a.buyer, b.buyer));
+  },
+  buyersTable(r) {
+    const g = this.groupBuyers(r);
+    if (!g.length) return '';
+    return `<div class="panel"><div class="panel-head"><h3>Compradores</h3><span class="small muted">${g.length} pessoa(s)</span></div>
+      <div class="table-wrap"><table class="data"><thead><tr><th>Comprador</th><th>Telefone</th><th>Números</th><th>Total</th><th>Pagamento</th></tr></thead><tbody>
+      ${g.map(b => `<tr><td>${esc(b.buyer)}</td><td>${esc(b.phone || '—')}</td><td class="num">${b.nums.map(n => this.pad(r, n)).join(', ')}</td><td class="num">${money(b.nums.length * r.price)}</td>
+        <td>${b.unpaid ? `<span class="pill warn">Falta ${money(b.unpaid * r.price)}</span>` : '<span class="pill ok">Pago</span>'}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+  },
+
+  async importJSON() {
+    const d = await pickJSON(); if (!d) return;
+    const list = Array.isArray(d) ? d : (d.rifas || d.raffles || (d.numbers ? [d] : null));
+    if (!Array.isArray(list)) return toast('Este JSON não contém rifas.', 'error');
+    const valid = list.filter(x => x && x.name && Array.isArray(x.numbers));
+    valid.forEach(x => { x.qty = x.numbers.length; x.start = x.start ?? (x.numbers[0]?.n ?? 1); x.winners = x.winners || []; x.price = +x.price || 0; });
+    const res = mergeById(state.raffles, valid);
+    if (valid[0]) state.activeRaffleId = valid[0].id;
+    App.refresh(); toast(`${res.added + res.updated} rifa(s) importada(s).`);
+  },
+
+  /** Lista de vendidos e disponíveis em PDF. */
+  pdfList(r) {
+    if (!pdfReady()) return;
+    const s = this.stats(r);
+    const doc = newPdf('p');
+    let y = pdfHeader(doc, 'Rifa · ' + r.name, `Prêmio: ${r.prize}${r.date ? ' · Sorteio em ' + fmtDate(r.date) : ''} · ${money(r.price)} por número`);
+    doc.autoTable({
+      ...tableStyles, startY: y, theme: 'plain',
+      body: [['Números vendidos', `${s.sold} de ${r.qty}`, 'Disponíveis', String(s.free)], ['Total vendido', money(s.total), 'Recebido', money(s.received)], ['A receber', money(s.pending), 'Chave Pix', r.pix || '—']],
+      styles: { ...tableStyles.styles, fontSize: 9.5, lineWidth: 0 },
+      columnStyles: { 0: { fontStyle: 'bold', textColor: PDF_MUTED }, 2: { fontStyle: 'bold', textColor: PDF_MUTED } }
+    });
+    y = doc.lastAutoTable.finalY + 4;
+    if (r.winners && r.winners.length) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Resultado do sorteio', 12, y + 4);
+      doc.autoTable({ ...tableStyles, startY: y + 7, head: [['Ordem', 'Número', 'Comprador', 'Telefone', 'Data']], body: r.winners.map((w, i) => [`${i + 1}º`, this.pad(r, w.n), w.buyer || 'não vendido', w.phone || '', fmtDateTime(w.at)]) });
+      y = doc.lastAutoTable.finalY + 4;
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Números vendidos', 12, y + 4);
+    const sold = r.numbers.filter(n => n.sold);
+    doc.autoTable({ ...tableStyles, startY: y + 7, head: [['Nº', 'Comprador', 'Telefone', 'Pagamento']],
+      body: sold.length ? sold.map(n => [this.pad(r, n.n), n.buyer, n.phone || '', n.paid ? 'Pago' : 'Pendente']) : [['—', 'Nenhum número vendido', '', '']],
+      columnStyles: { 0: { cellWidth: 16, fontStyle: 'bold' }, 3: { cellWidth: 26 } },
+      didParseCell: d => { if (d.section === 'body' && d.column.index === 3 && d.cell.raw === 'Pendente') d.cell.styles.textColor = [154, 91, 0]; } });
+    y = doc.lastAutoTable.finalY + 6;
+    const free = r.numbers.filter(n => !n.sold).map(n => this.pad(r, n.n));
+    if (y > 260) { doc.addPage(); y = 16; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(20, 30, 28); doc.text(`Números disponíveis (${free.length})`, 12, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    const lines = doc.splitTextToSize(free.length ? free.join('   ') : 'Todos os números foram vendidos.', 186);
+    y += 6;
+    lines.forEach(l => { if (y > 283) { doc.addPage(); y = 16; } doc.text(l, 12, y); y += 4.6; });
+    savePdf(doc, `rifa-${slug(r.name)}-lista.pdf`);
+  },
+
+  ticketsDialog(r) {
+    openModal({
+      title: 'Bilhetes para impressão',
+      body: `<p class="small muted">Cinco bilhetes por folha A4, com canhoto para quem vende e parte destacável para quem compra. Deixe 5 mm entre eles para facilitar o corte.</p>
+        <label class="field"><span>Quais números</span><select id="tk-which"><option value="all">Todos (${r.qty})</option><option value="free">Somente disponíveis</option><option value="sold">Somente vendidos (com nome do comprador)</option></select></label>`,
+      actions: [{ label: 'Cancelar' }, { label: 'Gerar bilhetes', cls: 'primary', onClick: m => this.ticketsPdf(r, $('#tk-which', m).value) }]
+    });
+  },
+  /** Bilhetes no estilo canhoto + bilhete (inspirado no gerador de rifas original). */
+  ticketsPdf(r, which) {
+    if (!pdfReady()) return false;
+    const list = r.numbers.filter(n => which === 'all' || (which === 'free' ? !n.sold : n.sold));
+    if (!list.length) { toast('Nenhum número nesse filtro.', 'warn'); return false; }
+    if (list.length > 300) toast(`Gerando ${list.length} bilhetes. Pode levar alguns segundos…`, 'ok');
+    const doc = newPdf('p');
+    const M = 10, TW = 190, TH = 51, GAP = 5, stubW = TW * .32;
+    const school = state.settings.school || '';
+    const logo = state.settings.logo;
+    const RED = [200, 62, 52], GREEN = [29, 127, 71], DARK = [30, 30, 30];
+    list.forEach((n, i) => {
+      const pos = i % 5;
+      if (i > 0 && pos === 0) doc.addPage();
+      const x = M, y = M + pos * (TH + GAP);
+      const num = this.pad(r, n.n);
+      doc.setDrawColor(...DARK); doc.setLineWidth(.35); doc.rect(x, y, TW, TH);
+      doc.setLineDashPattern([1.5, 1.2], 0); doc.line(x + stubW, y, x + stubW, y + TH); doc.setLineDashPattern([], 0);
+      // --- Canhoto (fica com quem vende)
+      const label = (lx, ly, w, text) => { doc.setLineDashPattern([.8, .8], 0); doc.setDrawColor(120); doc.setLineWidth(.2); doc.roundedRect(lx, ly, w, 5, 1, 1); doc.setLineDashPattern([], 0); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.setTextColor(...DARK); doc.text(text, lx + w / 2, ly + 3.5, { align: 'center' }); };
+      label(x + 3, y + 3, stubW - 6, 'FICA COM QUEM VENDE');
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(...DARK);
+      doc.text(fitText(doc, r.name, stubW - 6, 8.5, 6, 2), x + stubW / 2, y + 12, { align: 'center' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+      const lineField = (lbl, val, ly) => { doc.text(lbl, x + 3, ly); doc.setDrawColor(150); doc.setLineWidth(.2); doc.line(x + 13, ly + .6, x + stubW - 3, ly + .6); if (val) { doc.setFont('helvetica', 'bold'); doc.text(fitText(doc, val, stubW - 17, 8, 5.5, 1), x + 14, ly - .3); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); } };
+      lineField('Nome:', n.sold ? n.buyer : '', y + 24);
+      lineField('Fone:', n.sold ? n.phone : '', y + 31);
+      doc.setDrawColor(...RED); doc.setLineWidth(.5); doc.roundedRect(x + stubW / 2 - 13, y + TH - 12, 26, 8, 1.2, 1.2);
+      doc.setTextColor(...RED); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('Nº ' + num, x + stubW / 2, y + TH - 6.6, { align: 'center' });
+      // --- Bilhete (fica com quem compra)
+      const mx = x + stubW, mw = TW - stubW, cx = mx + mw / 2;
+      label(mx + 4, y + 3, mw - 8, 'FICA COM QUEM COMPRA');
+      let ty = y + 11;
+      if (logo) {
+        const lh = 8, lw = Math.min(30, lh * (state.settings.logoW / state.settings.logoH || 1));
+        try { doc.addImage(logo, imgFormat(logo), cx - lw / 2, ty, lw, lh, 'logo'); } catch { }
+        ty += lh + 3.5;
+      } else ty += 7;
+      doc.setTextColor(90); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+      if (school) { doc.text(fitText(doc, school, mw - 10, 8, 6, 1), cx, ty, { align: 'center' }); ty += 5; }
+      doc.setTextColor(...DARK); doc.text(fitText(doc, r.name.toUpperCase(), mw - 10, 13, 8, 1), cx, ty + 1, { align: 'center' }); ty += 5.5;
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(70);
+      doc.text(fitText(doc, `Prêmio: ${r.prize}${r.date ? '  ·  Sorteio: ' + fmtDate(r.date) : ''}`, mw - 10, 8, 6, 1), cx, ty, { align: 'center' });
+      // Linha inferior: valor, número, pix
+      const by = y + TH - 12;
+      doc.setDrawColor(225); doc.setLineWidth(.2); doc.line(mx + 4, by - 2.5, mx + mw - 4, by - 2.5);
+      doc.setDrawColor(...GREEN); doc.setLineWidth(.5); doc.roundedRect(mx + 5, by, 30, 8, 4, 4);
+      doc.setTextColor(...GREEN); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(money(r.price), mx + 20, by + 5.5, { align: 'center' });
+      doc.setDrawColor(...RED); doc.roundedRect(cx - 15, by, 30, 8, 1.2, 1.2);
+      doc.setTextColor(...RED); doc.setFontSize(12); doc.text('Nº ' + num, cx, by + 5.6, { align: 'center' });
+      doc.setTextColor(...DARK); doc.setFontSize(7); doc.setFont('helvetica', 'bold');
+      doc.text('Pix:', mx + mw - 5, by + 2.6, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      doc.text(fitText(doc, r.pix || '______________________', 40, 7.5, 5.5, 2), mx + mw - 5, by + 5.8, { align: 'right' });
+    });
+    doc.save(`rifa-${slug(r.name)}-bilhetes.pdf`);
+    toast(`${list.length} bilhete(s) gerado(s).`);
+  }
+};
+
+/* =====================================================================
+   9. CANTINA / PRODUTOS
+   ===================================================================== */
+const PAGAMENTOS = ['Dinheiro', 'Pix', 'Cartão de débito', 'Cartão de crédito', 'Outro'];
+const Cantina = {
+  tab: 'vender', search: '', salesDate: todayISO(),
+  checkout: { customer: '', payment: 'Dinheiro', received: '' },
+
+  productById: id => state.products.find(p => p.id === id),
+  inCart(id) { const c = state.cart.find(x => x.productId === id); return c ? c.qty : 0; },
+  cartTotal() { return state.cart.reduce((s, c) => { const p = this.productById(c.productId); return s + (p ? p.price * c.qty : 0); }, 0); },
+
+  init() {
+    $('#ct-new').onclick = () => this.productForm(null);
+    $('#ct-search').oninput = e => { this.search = e.target.value; this.renderProducts(); };
+    $('#ct-catalog').onclick = () => this.catalogPdf();
+    $('#ct-json').onclick = () => {
+      if (!state.products.length && !state.sales.length) return toast('Nada para exportar ainda.', 'warn');
+      exportJSON({ tipo: 'cantina', versao: 1, exportadoEm: new Date().toISOString(), produtos: state.products, vendas: state.sales, ultimaVenda: state.saleSeq }, `cantina-${todayISO()}.json`);
+    };
+    $('#ct-import').onclick = () => this.importJSON();
+    $$('#ct-tabs button').forEach(b => b.onclick = () => { this.tab = b.dataset.tab; this.render(); });
+    $('#ct-products').addEventListener('click', e => {
+      const b = e.target.closest('[data-add],[data-edit]'); if (!b) return;
+      if (b.dataset.add) this.add(b.dataset.add); else this.productForm(this.productById(b.dataset.edit));
+    });
+    $('#ct-cart').addEventListener('click', e => {
+      const b = e.target.closest('[data-q],[data-act]'); if (!b) return;
+      if (b.dataset.q) {
+        const c = state.cart.find(x => x.productId === b.dataset.id);
+        if (b.dataset.q === '+') return this.add(b.dataset.id);
+        if (c) { c.qty--; if (c.qty <= 0) state.cart = state.cart.filter(x => x !== c); }
+        return this.renderAll();
+      }
+      if (b.dataset.act === 'finish') this.finish();
+      if (b.dataset.act === 'empty') { state.cart = []; this.renderAll(); }
+    });
+    $('#ct-cart').addEventListener('input', e => {
+      const k = e.target.dataset.co; if (!k) return;
+      this.checkout[k] = e.target.value;
+      if (k === 'payment') this.renderCart(); else this.updateChange();
+    });
+    $('#ct-vendas').addEventListener('click', e => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const sale = state.sales.find(s => s.id === b.dataset.id);
+      if (b.dataset.act === 'receipt') this.receiptPdf(sale);
+      if (b.dataset.act === 'cancel') this.cancelSale(sale);
+      if (b.dataset.act === 'report') this.reportPdf();
+    });
+    $('#ct-vendas').addEventListener('change', e => { if (e.target.id === 'ct-date') { this.salesDate = e.target.value || todayISO(); this.renderSales(); } });
+  },
+
+  productForm(p) {
+    const draft = { photo: p?.photo || null };
+    const m = openModal({
+      title: p ? 'Editar produto' : 'Novo produto',
+      body: `<div class="row" style="align-items:flex-start;gap:16px;flex-wrap:nowrap">
+          <div class="stack" style="gap:6px;width:130px;flex:none">
+            <button type="button" class="img-drop" id="pf-img">Enviar foto</button>
+            <button type="button" class="btn sm ghost" id="pf-img-rm">Remover foto</button>
+          </div>
+          <div class="stack" style="flex:1;gap:12px;min-width:0">
+            <label class="field"><span>Nome <b class="req">*</b></span><input type="text" id="pf-name" value="${esc(p?.name || '')}" placeholder="Ex.: Pão de queijo"></label>
+            <div class="grid-2">
+              <label class="field"><span>Preço <b class="req">*</b></span><input type="text" inputmode="decimal" id="pf-price" value="${p ? String(p.price.toFixed(2)).replace('.', ',') : ''}" placeholder="0,00"></label>
+              <label class="field"><span>Estoque</span><input type="number" id="pf-stock" min="0" value="${p && p.stock != null ? p.stock : ''}" placeholder="Sem controle"></label>
+            </div>
+          </div>
+        </div>
+        <p class="small muted">Deixe o estoque em branco para não controlar quantidade.</p>`,
+      actions: [
+        ...(p ? [{ label: 'Excluir', cls: 'danger', onClick: async () => {
+          if (!await confirmDialog(`Excluir o produto <b>${esc(p.name)}</b>? As vendas já registradas continuam no relatório.`, { ok: 'Excluir' })) return false;
+          state.products = state.products.filter(x => x.id !== p.id); state.cart = state.cart.filter(c => c.productId !== p.id);
+          this.renderAll(); App.counts(); toast('Produto excluído.');
+        } }] : []),
+        { label: 'Cancelar' },
+        { label: 'Salvar', cls: 'primary', onClick: mm => {
+          if (!validate(mm, ['#pf-name', '#pf-price'])) return false;
+          const price = parseMoney($('#pf-price', mm).value);
+          if (!(price >= 0)) { $('#pf-price', mm).classList.add('invalid'); toast('Preço inválido. Use o formato 3,50.', 'error'); return false; }
+          const st = $('#pf-stock', mm).value.trim();
+          const data = { name: $('#pf-name', mm).value.trim(), price: Math.round(price * 100) / 100, stock: st === '' ? null : Math.max(0, parseInt(st, 10)), photo: draft.photo };
+          if (p) Object.assign(p, data); else state.products.push({ id: uid(), ...data });
+          this.renderAll(); App.counts(); toast(p ? 'Produto atualizado.' : 'Produto cadastrado.');
+        } }
+      ]
+    });
+    const paint = () => { $('#pf-img', m).innerHTML = draft.photo ? `<img src="${draft.photo}" alt="">` : 'Enviar foto'; $('#pf-img-rm', m).hidden = !draft.photo; };
+    paint();
+    $('#pf-img', m).onclick = async () => {
+      const [f] = await pickFiles('image/*'); if (!f) return;
+      try { draft.photo = coverCrop(await loadImg(await fileToDataURL(f)), 500, 500); paint(); }
+      catch { toast('Não foi possível ler esta imagem.', 'error'); }
+    };
+    $('#pf-img-rm', m).onclick = () => { draft.photo = null; paint(); };
+  },
+
+  add(id) {
+    const p = this.productById(id); if (!p) return;
+    if (p.stock != null && this.inCart(id) >= p.stock) return toast(`Estoque insuficiente de ${p.name}.`, 'warn');
+    const c = state.cart.find(x => x.productId === id);
+    if (c) c.qty++; else state.cart.push({ productId: id, qty: 1 });
+    this.renderAll();
+  },
+
+  render() {
+    $$('#ct-tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === this.tab));
+    $('#ct-vender').hidden = this.tab !== 'vender';
+    $('#ct-vendas').hidden = this.tab !== 'vendas';
+    this.renderAll();
+  },
+  renderAll() { this.renderProducts(); this.renderCart(); this.renderSales(); App.counts(); },
+
+  renderProducts() {
+    const q = this.search.trim().toLowerCase();
+    const list = state.products.filter(p => !q || p.name.toLowerCase().includes(q)).sort((a, b) => byName(a.name, b.name));
+    const el = $('#ct-products');
+    if (!state.products.length) {
+      el.innerHTML = `<div class="empty"><strong>Nenhum produto cadastrado</strong>Cadastre os itens com nome, preço, foto e estoque.<div class="row"><button class="btn primary" onclick="Cantina.productForm(null)">Novo produto</button></div></div>`;
+      return;
+    }
+    el.innerHTML = list.length ? `<div class="prod-grid">${list.map(p => {
+      const left = p.stock == null ? null : p.stock - this.inCart(p.id);
+      const pill = p.stock == null ? '' : left <= 0 ? '<span class="pill danger">Sem estoque</span>' : left <= 5 ? `<span class="pill warn">Restam ${left}</span>` : `<span class="pill neutral">Estoque ${left}</span>`;
+      return `<div class="prod">
+        <div class="prod-img">${p.photo ? `<img src="${p.photo}" alt="">` : '<span class="small">Sem foto</span>'}</div>
+        <div class="prod-body"><strong>${esc(p.name)}</strong>
+          <div class="row" style="justify-content:space-between;gap:6px"><span class="prod-price">${money(p.price)}</span>${pill}</div>
+          <div class="prod-foot"><button class="btn sm primary" data-add="${p.id}" type="button" ${left !== null && left <= 0 ? 'disabled' : ''}>Adicionar</button>
+          <button class="btn sm icon" data-edit="${p.id}" type="button" aria-label="Editar ${esc(p.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button></div>
+        </div></div>`;
+    }).join('')}</div>` : '<div class="empty">Nenhum produto encontrado.</div>';
+  },
+
+  renderCart() {
+    const co = this.checkout, total = this.cartTotal();
+    const items = state.cart.map(c => ({ c, p: this.productById(c.productId) })).filter(x => x.p);
+    $('#ct-cart').innerHTML = `
+      <div class="panel-head" style="margin-bottom:0"><h2>Carrinho</h2>${items.length ? '<button class="btn sm ghost" data-act="empty" type="button">Esvaziar</button>' : ''}</div>
+      <div class="cart-items">${items.length ? items.map(({ c, p }) => `
+        <div class="cart-item"><span class="nm">${esc(p.name)}</span><span class="num">${money(p.price * c.qty)}</span>
+          <span class="small muted num">${money(p.price)} cada</span>
+          <span class="stepper"><button type="button" data-q="-" data-id="${p.id}" aria-label="Diminuir">−</button><span>${c.qty}</span><button type="button" data-q="+" data-id="${p.id}" aria-label="Aumentar">+</button></span></div>`).join('')
+        : '<p class="small muted" style="padding:14px 0">Toque em <b>Adicionar</b> nos produtos para montar a venda.</p>'}</div>
+      <div class="total-line"><span>Total</span><b>${money(total)}</b></div>
+      <div class="stack" style="gap:10px;margin-top:12px">
+        <label class="field"><span>Cliente (opcional)</span><input type="text" data-co="customer" value="${esc(co.customer)}" placeholder="Nome do aluno ou responsável"></label>
+        <label class="field"><span>Forma de pagamento</span><select data-co="payment">${PAGAMENTOS.map(p => `<option ${p === co.payment ? 'selected' : ''}>${p}</option>`).join('')}</select></label>
+        ${co.payment === 'Dinheiro' ? `<div class="grid-2"><label class="field"><span>Valor recebido</span><input type="text" inputmode="decimal" data-co="received" value="${esc(co.received)}" placeholder="0,00"></label>
+          <div class="field"><span>Troco</span><strong id="ct-change" class="num" style="padding:8px 0;font-size:1.05rem">—</strong></div></div>` : ''}
+        <button class="btn primary block" data-act="finish" type="button" ${items.length ? '' : 'disabled'}>Finalizar venda</button>
+      </div>`;
+    this.updateChange();
+  },
+  updateChange() {
+    const el = $('#ct-change'); if (!el) return;
+    const rec = parseMoney(this.checkout.received), total = this.cartTotal();
+    if (!this.checkout.received || isNaN(rec)) { el.textContent = '—'; el.style.color = ''; return; }
+    const ch = rec - total;
+    el.textContent = ch >= 0 ? money(ch) : 'Falta ' + money(-ch);
+    el.style.color = ch >= 0 ? 'var(--ok)' : 'var(--danger)';
+  },
+
+  finish() {
+    const items = state.cart.map(c => ({ c, p: this.productById(c.productId) })).filter(x => x.p);
+    if (!items.length) return toast('O carrinho está vazio.', 'warn');
+    for (const { c, p } of items) if (p.stock != null && c.qty > p.stock) return toast(`Estoque insuficiente de ${p.name} (disponível: ${p.stock}).`, 'error');
+    const total = this.cartTotal(), co = this.checkout;
+    let received = null, change = null;
+    if (co.payment === 'Dinheiro' && co.received) {
+      received = parseMoney(co.received);
+      if (isNaN(received) || received < total) return toast('O valor recebido é menor que o total da venda.', 'error');
+      change = received - total;
+    }
+    const sale = {
+      id: uid(), seq: ++state.saleSeq, at: new Date().toISOString(),
+      items: items.map(({ c, p }) => ({ productId: p.id, name: p.name, price: p.price, qty: c.qty })),
+      total, payment: co.payment, customer: co.customer.trim(), received, change, canceled: false
+    };
+    items.forEach(({ c, p }) => { if (p.stock != null) p.stock -= c.qty; });
+    state.sales.push(sale);
+    state.cart = []; this.checkout = { customer: '', payment: co.payment, received: '' };
+    this.renderAll();
+    openModal({
+      title: `Venda nº ${sale.seq} registrada`,
+      body: `<div class="total-line"><span>Total</span><b>${money(sale.total)}</b></div>
+        <p class="muted">${sale.items.reduce((s, i) => s + i.qty, 0)} item(ns) · ${esc(sale.payment)}${sale.change != null ? ' · Troco ' + money(sale.change) : ''}</p>`,
+      actions: [{ label: 'Nova venda' }, { label: 'Comprovante (PDF)', cls: 'primary', onClick: () => this.receiptPdf(sale) }]
+    });
+  },
+
+  async cancelSale(sale) {
+    if (!await confirmDialog(`Cancelar a venda nº ${sale.seq} (${money(sale.total)})? Os itens voltam para o estoque.`, { ok: 'Cancelar venda' })) return;
+    sale.canceled = true;
+    sale.items.forEach(i => { const p = this.productById(i.productId); if (p && p.stock != null) p.stock += i.qty; });
+    this.renderAll(); toast(`Venda nº ${sale.seq} cancelada.`);
+  },
+
+  daySales(date) { return state.sales.filter(s => todayISO(new Date(s.at)) === date); },
+  summary(list) {
+    const ok = list.filter(s => !s.canceled);
+    const total = ok.reduce((a, s) => a + s.total, 0);
+    const byPay = {}, byProd = {};
+    ok.forEach(s => {
+      byPay[s.payment] = (byPay[s.payment] || 0) + s.total;
+      s.items.forEach(i => { const k = i.name; byProd[k] ||= { qty: 0, total: 0 }; byProd[k].qty += i.qty; byProd[k].total += i.qty * i.price; });
+    });
+    return { ok, total, count: ok.length, avg: ok.length ? total / ok.length : 0, items: ok.reduce((a, s) => a + s.items.reduce((b, i) => b + i.qty, 0), 0), byPay, byProd };
+  },
+
+  renderSales() {
+    const list = this.daySales(this.salesDate).sort((a, b) => b.at.localeCompare(a.at));
+    const s = this.summary(list);
+    $('#ct-vendas').innerHTML = `
+      <div class="toolbar"><label class="inline-field"><span>Dia</span><input type="date" id="ct-date" value="${this.salesDate}"></label>
+        <span class="spacer"></span><button class="btn primary" data-act="report" type="button">Relatório do dia (PDF)</button></div>
+      <div class="stats" style="margin-bottom:16px">
+        <div class="stat"><div class="k">Total do dia</div><div class="v">${money(s.total)}</div><div class="s">${fmtDate(this.salesDate)}</div></div>
+        <div class="stat"><div class="k">Vendas</div><div class="v">${s.count}</div><div class="s">${list.length - s.count} cancelada(s)</div></div>
+        <div class="stat"><div class="k">Ticket médio</div><div class="v">${money(s.avg)}</div><div class="s">por venda</div></div>
+        <div class="stat"><div class="k">Itens vendidos</div><div class="v">${s.items}</div><div class="s">unidades</div></div>
+      </div>
+      ${Object.keys(s.byPay).length ? `<div class="chips" style="margin-bottom:14px">${Object.entries(s.byPay).map(([k, v]) => `<span class="chip pick">${esc(k)}: <b class="num">${money(v)}</b></span>`).join('')}</div>` : ''}
+      ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Nº</th><th>Hora</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th>Total</th><th></th></tr></thead><tbody>
+        ${list.map(v => `<tr style="${v.canceled ? 'opacity:.55' : ''}"><td class="num">${v.seq}</td><td class="num">${fmtTime(v.at)}</td><td>${esc(v.customer || '—')}</td>
+          <td>${v.items.map(i => `${i.qty}× ${esc(i.name)}`).join(', ')}</td><td>${esc(v.payment)}</td>
+          <td class="num"><b>${money(v.total)}</b>${v.canceled ? ' <span class="pill danger">Cancelada</span>' : ''}</td>
+          <td class="actions"><button class="btn sm" data-act="receipt" data-id="${v.id}" type="button">Comprovante</button>
+          ${v.canceled ? '' : `<button class="btn sm ghost danger" data-act="cancel" data-id="${v.id}" type="button">Cancelar</button>`}</td></tr>`).join('')}
+        </tbody></table></div>` : `<div class="empty"><strong>Nenhuma venda neste dia</strong>As vendas finalizadas no carrinho aparecem aqui.</div>`}`;
+  },
+
+  /** Comprovante em formato de bobina (80 mm). */
+  receiptPdf(sale) {
+    if (!pdfReady() || !sale) return;
+    const h = 72 + sale.items.length * 9 + (sale.change != null ? 10 : 0) + (sale.customer ? 5 : 0);
+    const doc = new window.jspdf.jsPDF({ unit: 'mm', format: [80, h] });
+    const W = 80, M = 5;
+    let y = 9;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(20);
+    doc.text(fitText(doc, state.settings.school || 'Cantina Escolar', W - 2 * M, 10.5, 7, 2), W / 2, y, { align: 'center' }); y += 6;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80);
+    doc.text('COMPROVANTE DE VENDA', W / 2, y, { align: 'center' }); y += 4;
+    doc.text(`Venda nº ${sale.seq} · ${fmtDateTime(sale.at)}`, W / 2, y, { align: 'center' }); y += 4;
+    if (sale.customer) { doc.text('Cliente: ' + sale.customer, W / 2, y, { align: 'center' }); y += 5; }
+    const dash = () => { doc.setLineDashPattern([1, 1], 0); doc.setDrawColor(140); doc.line(M, y, W - M, y); doc.setLineDashPattern([], 0); y += 4.5; };
+    if (sale.canceled) { doc.setTextColor(180, 40, 30); doc.setFont('helvetica', 'bold'); doc.text('VENDA CANCELADA', W / 2, y, { align: 'center' }); y += 4.5; }
+    dash();
+    doc.setTextColor(20);
+    sale.items.forEach(i => {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+      doc.text(fitText(doc, i.name, W - 2 * M, 8.5, 6.5, 1), M, y); y += 4;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+      doc.text(`${i.qty} × ${money(i.price)}`, M, y); doc.text(money(i.qty * i.price), W - M, y, { align: 'right' }); y += 5;
+    });
+    dash();
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+    doc.text('TOTAL', M, y); doc.text(money(sale.total), W - M, y, { align: 'right' }); y += 6;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+    doc.text('Pagamento', M, y); doc.text(sale.payment, W - M, y, { align: 'right' }); y += 4.5;
+    if (sale.change != null) {
+      doc.text('Recebido', M, y); doc.text(money(sale.received), W - M, y, { align: 'right' }); y += 4.5;
+      doc.text('Troco', M, y); doc.text(money(sale.change), W - M, y, { align: 'right' }); y += 4.5;
+    }
+    y += 2; dash();
+    doc.setFontSize(7); doc.setTextColor(110);
+    doc.text('Documento sem valor fiscal. Obrigado!', W / 2, y, { align: 'center' });
+    doc.save(`comprovante-venda-${sale.seq}.pdf`);
+    toast(`Comprovante da venda nº ${sale.seq} gerado.`);
+  },
+
+  /** Catálogo A4 com foto, nome e preço. */
+  catalogPdf() {
+    if (!pdfReady()) return;
+    if (!state.products.length) return toast('Cadastre produtos antes de gerar o catálogo.', 'warn');
+    const doc = newPdf('p');
+    const list = [...state.products].sort((a, b) => byName(a.name, b.name));
+    const M = 12, cols = 3, gap = 6, cw = (186 - gap * (cols - 1)) / cols, ih = cw, ch = ih + 17;
+    let y = pdfHeader(doc, 'Catálogo de produtos', `${list.length} item(ns) · preços válidos em ${fmtDate(todayISO())}`), col = 0;
+    list.forEach(p => {
+      if (y + ch > 297 - 14) { doc.addPage(); y = pdfHeader(doc, 'Catálogo de produtos', 'continuação'); col = 0; }
+      const x = M + col * (cw + gap);
+      doc.setDrawColor(214, 223, 220); doc.setLineWidth(.25); doc.roundedRect(x, y, cw, ch, 2, 2);
+      if (p.photo) {
+        // foto quadrada centralizada na área de imagem do card
+        doc.addImage(p.photo, 'JPEG', x + .5, y + .5, cw - 1, ih - 1, undefined, 'FAST');
+      } else {
+        doc.setFillColor(234, 240, 238); doc.rect(x + .5, y + .5, cw - 1, ih - 1, 'F');
+        doc.setFontSize(8); doc.setTextColor(...PDF_MUTED); doc.text('Sem foto', x + cw / 2, y + ih / 2, { align: 'center' });
+      }
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 30, 28);
+      doc.text(fitText(doc, p.name, cw - 6, 10, 7, 1), x + 3, y + ih + 5.5);
+      doc.setTextColor(...PDF_ACCENT); doc.setFontSize(13);
+      doc.text(money(p.price), x + 3, y + ih + 12.5);
+      if (p.stock === 0) { doc.setFontSize(7.5); doc.setTextColor(179, 54, 27); doc.text('ESGOTADO', x + cw - 3, y + ih + 12.5, { align: 'right' }); }
+      col++; if (col === cols) { col = 0; y += ch + gap; }
+    });
+    savePdf(doc, `catalogo-produtos-${todayISO()}.pdf`);
+  },
+
+  /** Relatório de vendas do dia selecionado. */
+  reportPdf() {
+    if (!pdfReady()) return;
+    const list = this.daySales(this.salesDate).sort((a, b) => a.at.localeCompare(b.at));
+    if (!list.length) return toast('Não há vendas neste dia.', 'warn');
+    const s = this.summary(list);
+    const doc = newPdf('p');
+    let y = pdfHeader(doc, 'Relatório de vendas do dia', `${fmtDate(this.salesDate)} · ${weekday(this.salesDate)}`);
+    doc.autoTable({ ...tableStyles, startY: y, theme: 'plain', styles: { ...tableStyles.styles, fontSize: 10, lineWidth: 0 },
+      columnStyles: { 0: { fontStyle: 'bold', textColor: PDF_MUTED }, 2: { fontStyle: 'bold', textColor: PDF_MUTED } },
+      body: [['Total vendido', money(s.total), 'Vendas', String(s.count)], ['Ticket médio', money(s.avg), 'Itens vendidos', String(s.items)], ['Canceladas', String(list.length - s.count), '', '']] });
+    y = doc.lastAutoTable.finalY + 5;
+    const title = t => { if (y > 265) { doc.addPage(); y = 16; } doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(20, 30, 28); doc.text(t, 12, y); y += 3; };
+    title('Por produto');
+    doc.autoTable({ ...tableStyles, startY: y, head: [['Produto', 'Quantidade', 'Total']],
+      body: Object.entries(s.byProd).sort((a, b) => b[1].total - a[1].total).map(([k, v]) => [k, v.qty, money(v.total)]),
+      columnStyles: { 1: { halign: 'right', cellWidth: 30 }, 2: { halign: 'right', cellWidth: 35 } } });
+    y = doc.lastAutoTable.finalY + 7;
+    title('Por forma de pagamento');
+    doc.autoTable({ ...tableStyles, startY: y, head: [['Forma de pagamento', 'Total']], body: Object.entries(s.byPay).map(([k, v]) => [k, money(v)]), columnStyles: { 1: { halign: 'right', cellWidth: 35 } } });
+    y = doc.lastAutoTable.finalY + 7;
+    title('Vendas');
+    doc.autoTable({ ...tableStyles, startY: y, head: [['Nº', 'Hora', 'Cliente', 'Itens', 'Pagamento', 'Total']],
+      body: list.map(v => [v.seq, fmtTime(v.at), v.customer || '—', v.items.map(i => `${i.qty}x ${i.name}`).join(', '), v.payment + (v.canceled ? ' (cancelada)' : ''), money(v.total)]),
+      columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 14 }, 5: { halign: 'right', cellWidth: 24 } },
+      didParseCell: d => { if (d.section === 'body' && list[d.row.index]?.canceled) d.cell.styles.textColor = [160, 160, 160]; } });
+    savePdf(doc, `relatorio-vendas-${this.salesDate}.pdf`);
+  },
+
+  async importJSON() {
+    const d = await pickJSON(); if (!d) return;
+    const prods = d.produtos || d.products, sales = d.vendas || d.sales;
+    if (!Array.isArray(prods) && !Array.isArray(sales)) return toast('Este JSON não contém produtos nem vendas.', 'error');
+    const a = mergeById(state.products, (prods || []).filter(p => p && p.name).map(p => ({ ...p, price: +p.price || 0, stock: p.stock == null || p.stock === '' ? null : +p.stock })));
+    const b = mergeById(state.sales, (sales || []).filter(s => s && Array.isArray(s.items)));
+    state.saleSeq = Math.max(state.saleSeq, d.ultimaVenda || 0, ...state.sales.map(s => s.seq || 0));
+    this.renderAll(); toast(`Importado: ${a.added + a.updated} produto(s) e ${b.added + b.updated} venda(s).`);
+  }
+};
+</script>
+<script>
+/* =====================================================================
+   10. PLANEJAMENTO DE AULAS
+   ===================================================================== */
+const Plan = {
+  mode: 'lista', month: todayISO().slice(0, 7), fTurma: '', fDisc: '',
+
+  init() {
+    $('#pl-turma-form').onsubmit = e => { e.preventDefault(); const v = $('#pl-turma-in').value.trim(); if (!v) return; ensureTurma(v); $('#pl-turma-in').value = ''; App.refresh(); toast(`Turma ${v} adicionada.`); };
+    $('#pl-disc-form').onsubmit = e => { e.preventDefault(); const v = $('#pl-disc-in').value.trim(); if (!v) return; ensureDisc(v); $('#pl-disc-in').value = ''; this.render(); toast(`Disciplina ${v} adicionada.`); };
+    $('#pl-turmas').onclick = e => { const b = e.target.closest('[data-rm]'); if (b) { state.turmas = state.turmas.filter(t => t !== b.dataset.rm); App.refresh(); } };
+    $('#pl-discs').onclick = e => { const b = e.target.closest('[data-rm]'); if (b) { state.disciplinas = state.disciplinas.filter(t => t !== b.dataset.rm); this.render(); } };
+    $$('#pl-mode button').forEach(b => b.onclick = () => { this.mode = b.dataset.mode; this.render(); });
+    $('#pl-prev').onclick = () => this.shift(-1);
+    $('#pl-next').onclick = () => this.shift(1);
+    $('#pl-f-turma').onchange = e => { this.fTurma = e.target.value; this.render(); };
+    $('#pl-f-disc').onchange = e => { this.fDisc = e.target.value; this.render(); };
+    $('#pl-new').onclick = () => this.form(null);
+    $('#pl-pdf').onclick = () => this.pdf();
+    $('#pl-json').onclick = () => {
+      if (!state.lessons.length) return toast('Não há aulas planejadas para exportar.', 'warn');
+      exportJSON({ tipo: 'planejamento', versao: 1, exportadoEm: new Date().toISOString(), turmas: state.turmas, disciplinas: state.disciplinas, aulas: state.lessons }, `planejamento-${todayISO()}.json`);
+    };
+    $('#pl-import').onclick = () => this.importJSON();
+    $('#pl-body').addEventListener('click', e => {
+      const ev = e.target.closest('[data-edit]');
+      if (ev) { e.stopPropagation(); return this.form(state.lessons.find(l => l.id === ev.dataset.edit)); }
+      const dup = e.target.closest('[data-dup]');
+      if (dup) { const l = state.lessons.find(x => x.id === dup.dataset.dup); return this.form({ ...l, id: null, date: '' }); }
+      const del = e.target.closest('[data-del]');
+      if (del) return this.remove(del.dataset.del);
+      const day = e.target.closest('[data-day]');
+      if (day) this.form(null, day.dataset.day);
+    });
+  },
+  shift(d) { const [y, m] = this.month.split('-').map(Number); const dt = new Date(y, m - 1 + d, 1); this.month = todayISO(dt).slice(0, 7); this.render(); },
+  monthLabel() { const [y, m] = this.month.split('-').map(Number); return `${MESES[m - 1]} de ${y}`; },
+  filtered() {
+    return state.lessons.filter(l => l.date.startsWith(this.month) && (!this.fTurma || l.turma === this.fTurma) && (!this.fDisc || l.disciplina === this.fDisc))
+      .sort((a, b) => a.date.localeCompare(b.date) || byName(a.aula || '', b.aula || '') || byName(a.turma, b.turma));
+  },
+
+  form(l, presetDate) {
+    const isNew = !l || !l.id;
+    l = l || {};
+    openModal({
+      title: isNew ? 'Planejar aula' : 'Editar aula', wide: true,
+      body: `<div class="grid-3">
+          <label class="field"><span>Data <b class="req">*</b></span><input type="date" id="lf-date" value="${esc(l.date || presetDate || todayISO())}"></label>
+          <label class="field"><span>Turma <b class="req">*</b></span><input type="text" id="lf-turma" list="dl-turmas" value="${esc(l.turma || this.fTurma)}"></label>
+          <label class="field"><span>Disciplina <b class="req">*</b></span><input type="text" id="lf-disc" list="dl-discs" value="${esc(l.disciplina || this.fDisc)}"></label>
+        </div>
+        <datalist id="dl-discs">${state.disciplinas.map(d => `<option value="${esc(d)}">`).join('')}</datalist>
+        <label class="field"><span>Aula / horário</span><input type="text" id="lf-aula" value="${esc(l.aula || '')}" placeholder="Ex.: 2ª e 3ª aulas"></label>
+        <label class="field"><span>Conteúdo <b class="req">*</b></span><textarea id="lf-cont" rows="2">${esc(l.conteudo || '')}</textarea></label>
+        <label class="field"><span>Objetivos</span><textarea id="lf-obj" rows="2">${esc(l.objetivos || '')}</textarea></label>
+        <div class="grid-2">
+          <label class="field"><span>Recursos</span><textarea id="lf-rec" rows="2" placeholder="Livro, projetor, material…">${esc(l.recursos || '')}</textarea></label>
+          <label class="field"><span>Observações</span><textarea id="lf-obs" rows="2">${esc(l.obs || '')}</textarea></label>
+        </div>`,
+      actions: [{ label: 'Cancelar' }, { label: 'Salvar aula', cls: 'primary', onClick: m => {
+        if (!validate(m, ['#lf-date', '#lf-turma', '#lf-disc', '#lf-cont'])) return false;
+        const data = { date: $('#lf-date', m).value, turma: $('#lf-turma', m).value.trim(), disciplina: $('#lf-disc', m).value.trim(), aula: $('#lf-aula', m).value.trim(), conteudo: $('#lf-cont', m).value.trim(), objetivos: $('#lf-obj', m).value.trim(), recursos: $('#lf-rec', m).value.trim(), obs: $('#lf-obs', m).value.trim() };
+        ensureTurma(data.turma); ensureDisc(data.disciplina);
+        if (isNew) state.lessons.push({ id: uid(), ...data }); else Object.assign(state.lessons.find(x => x.id === l.id), data);
+        this.month = data.date.slice(0, 7);
+        App.refresh(); toast(isNew ? `Aula de ${fmtDate(data.date)} planejada.` : 'Aula atualizada.');
+      } }]
+    });
+  },
+  async remove(id) {
+    const l = state.lessons.find(x => x.id === id);
+    if (!await confirmDialog(`Excluir a aula de <b>${esc(l.disciplina)}</b> (${esc(l.turma)}) em ${fmtDate(l.date)}?`, { ok: 'Excluir' })) return;
+    state.lessons = state.lessons.filter(x => x.id !== id); App.refresh(); toast('Aula excluída.');
+  },
+
+  render() {
+    $('#pl-turmas').innerHTML = turmasSorted().map(t => `<span class="chip">${esc(t)}<button type="button" data-rm="${esc(t)}" aria-label="Remover ${esc(t)}">×</button></span>`).join('') || '<span class="small muted">Nenhuma turma cadastrada.</span>';
+    $('#pl-discs').innerHTML = [...state.disciplinas].sort(byName).map(t => `<span class="chip">${esc(t)}<button type="button" data-rm="${esc(t)}" aria-label="Remover ${esc(t)}">×</button></span>`).join('') || '<span class="small muted">Nenhuma disciplina cadastrada.</span>';
+    if (this.fTurma && !state.turmas.includes(this.fTurma)) this.fTurma = '';
+    if (this.fDisc && !state.disciplinas.includes(this.fDisc)) this.fDisc = '';
+    $('#pl-f-turma').innerHTML = turmaOptions(this.fTurma, 'Todas as turmas');
+    $('#pl-f-disc').innerHTML = discOptions(this.fDisc, 'Todas as disciplinas');
+    $$('#pl-mode button').forEach(b => b.classList.toggle('on', b.dataset.mode === this.mode));
+    $('#pl-month-label').textContent = this.monthLabel();
+    const list = this.filtered();
+    $('#pl-count').textContent = `${list.length} aula(s) no mês`;
+    $('#pl-body').innerHTML = this.mode === 'lista' ? this.listHTML(list) : this.calHTML(list);
+  },
+  listHTML(list) {
+    if (!list.length) return `<div class="empty"><strong>Nenhuma aula planejada em ${this.monthLabel()}</strong>Use <b>Nova aula</b> ou troque para o calendário e clique no dia.
+      <div class="row"><button class="btn primary" onclick="Plan.form(null)">Nova aula</button></div></div>`;
+    const days = {};
+    list.forEach(l => (days[l.date] ||= []).push(l));
+    return Object.entries(days).map(([d, ls]) => `<div class="lesson-day"><h3>${fmtDate(d)} · ${weekday(d)}</h3>
+      ${ls.map(l => `<article class="lesson">
+        <div class="lesson-top"><span class="pill info">${esc(l.turma)}</span><strong>${esc(l.disciplina)}</strong>${l.aula ? `<span class="small muted">${esc(l.aula)}</span>` : ''}
+          <span class="spacer"></span><button class="btn sm ghost" data-dup="${l.id}" type="button">Duplicar</button><button class="btn sm" data-edit="${l.id}" type="button">Editar</button><button class="btn sm ghost danger" data-del="${l.id}" type="button">Excluir</button></div>
+        <dl><dt>Conteúdo</dt><dd>${esc(l.conteudo)}</dd>
+          ${l.objetivos ? `<dt>Objetivos</dt><dd>${esc(l.objetivos)}</dd>` : ''}
+          ${l.recursos ? `<dt>Recursos</dt><dd>${esc(l.recursos)}</dd>` : ''}
+          ${l.obs ? `<dt>Observações</dt><dd>${esc(l.obs)}</dd>` : ''}</dl>
+      </article>`).join('')}</div>`).join('');
+  },
+  calHTML(list) {
+    const [y, m] = this.month.split('-').map(Number);
+    const first = new Date(y, m - 1, 1), start = new Date(y, m - 1, 1 - first.getDay());
+    const weeks = Math.ceil((first.getDay() + new Date(y, m, 0).getDate()) / 7);
+    const today = todayISO();
+    let html = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => `<div class="cal-h">${d}</div>`).join('');
+    for (let i = 0; i < weeks * 7; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), iso = todayISO(d);
+      const evs = list.filter(l => l.date === iso);
+      html += `<div class="cal-d ${d.getMonth() !== m - 1 ? 'out' : ''} ${iso === today ? 'today' : ''}" data-day="${iso}" title="Planejar aula em ${fmtDate(iso)}">
+        <span class="dn">${d.getDate()}</span>${evs.map(l => `<div class="cal-ev" data-edit="${l.id}" title="${esc(l.turma + ' · ' + l.disciplina + ': ' + l.conteudo)}">${esc(l.turma)} · ${esc(l.disciplina)}</div>`).join('')}</div>`;
+    }
+    return `<div class="cal">${html}</div><p class="small muted" style="margin-top:8px">Clique em um dia para planejar uma aula; clique em uma aula para editar.</p>`;
+  },
+
+  pdf() {
+    if (!pdfReady()) return;
+    const list = this.filtered();
+    if (!list.length) return toast(`Nenhuma aula em ${this.monthLabel()} com estes filtros.`, 'warn');
+    const doc = newPdf('l');
+    const sub = [this.monthLabel(), this.fTurma && 'Turma ' + this.fTurma, this.fDisc].filter(Boolean).join(' · ');
+    const y = pdfHeader(doc, 'Planejamento de aulas', sub.charAt(0).toUpperCase() + sub.slice(1));
+    doc.autoTable({ ...tableStyles, startY: y,
+      head: [['Data', 'Turma / Disciplina', 'Conteúdo', 'Objetivos', 'Recursos', 'Observações']],
+      body: list.map(l => [`${fmtDate(l.date)}\n${weekday(l.date)}${l.aula ? '\n' + l.aula : ''}`, `${l.turma}\n${l.disciplina}`, l.conteudo, l.objetivos, l.recursos, l.obs]),
+      columnStyles: { 0: { cellWidth: 26 }, 1: { cellWidth: 32, fontStyle: 'bold' }, 2: { cellWidth: 70 }, 3: { cellWidth: 55 } },
+      styles: { ...tableStyles.styles, valign: 'top' } });
+    savePdf(doc, `planejamento-${this.month}${this.fTurma ? '-' + slug(this.fTurma) : ''}.pdf`);
+  },
+  async importJSON() {
+    const d = await pickJSON(); if (!d) return;
+    const aulas = Array.isArray(d) ? d : (d.aulas || d.lessons);
+    if (!Array.isArray(aulas)) return toast('Este JSON não contém aulas planejadas.', 'error');
+    (d.turmas || []).forEach(ensureTurma); (d.disciplinas || []).forEach(ensureDisc);
+    const valid = aulas.filter(l => l && l.date && l.turma && l.disciplina);
+    valid.forEach(l => { ensureTurma(l.turma); ensureDisc(l.disciplina); });
+    const r = mergeById(state.lessons, valid);
+    if (valid[0]) this.month = valid[0].date.slice(0, 7);
+    App.refresh(); toast(`Importado: ${r.added} aula(s) nova(s), ${r.updated} atualizada(s).`);
+  }
+};
+
+/* =====================================================================
+   11. ABONADAS / FALTAS JUSTIFICADAS
+   ===================================================================== */
+const TIPOS_FALTA = ['Abonada', 'Atestado médico', 'Falta justificada', 'Licença', 'Compensação de horas', 'Outro'];
+const STATUS_PILL = { Pendente: 'warn', Aprovada: 'ok', Rejeitada: 'danger' };
+const Abon = {
+  from: '', to: '', status: '', search: '',
+
+  init() {
+    $('#ab-new').onclick = () => this.form(null);
+    $('#ab-from').onchange = e => { this.from = e.target.value; this.render(); };
+    $('#ab-to').onchange = e => { this.to = e.target.value; this.render(); };
+    $('#ab-status').onchange = e => { this.status = e.target.value; this.render(); };
+    $('#ab-search').oninput = e => { this.search = e.target.value; this.render(); };
+    $('#ab-clear-f').onclick = () => { this.from = this.to = this.status = this.search = ''; ['#ab-from', '#ab-to', '#ab-status', '#ab-search'].forEach(s => $(s).value = ''); this.render(); };
+    $('#ab-json').onclick = () => {
+      if (!state.abonadas.length) return toast('Não há solicitações para exportar.', 'warn');
+      exportJSON({ tipo: 'abonadas', versao: 1, exportadoEm: new Date().toISOString(), abonadas: state.abonadas }, `abonadas-${todayISO()}.json`);
+    };
+    $('#ab-import').onclick = () => this.importJSON();
+    $('#ab-pdf').onclick = () => this.pdf();
+    $('#ab-body').addEventListener('click', e => {
+      const b = e.target.closest('[data-act]'); if (!b) return;
+      const a = state.abonadas.find(x => x.id === b.dataset.id);
+      if (b.dataset.act === 'edit') this.form(a);
+      if (b.dataset.act === 'ok') this.decide(a, 'Aprovada');
+      if (b.dataset.act === 'no') this.decide(a, 'Rejeitada');
+      if (b.dataset.act === 'del') this.remove(a);
+      if (b.dataset.act === 'sub') this.form(a, true);
+    });
+  },
+  professors() { return [...new Set(state.abonadas.flatMap(a => [a.professor, a.substituto]).filter(Boolean))].sort(byName); },
+  filtered() {
+    const q = this.search.trim().toLowerCase();
+    return state.abonadas.filter(a =>
+      (!this.from || a.date >= this.from) && (!this.to || a.date <= this.to) && (!this.status || a.status === this.status) &&
+      (!q || a.professor.toLowerCase().includes(q) || (a.substituto || '').toLowerCase().includes(q))
+    ).sort((a, b) => a.date.localeCompare(b.date) || byName(a.professor, b.professor));
+  },
+
+  form(a, focusSub = false) {
+    const isNew = !a;
+    a = a || { status: 'Pendente', turmas: [], tipo: 'Abonada' };
+    const turmas = [...new Set([...turmasSorted(), ...(a.turmas || [])])];
+    const m = openModal({
+      title: isNew ? 'Nova solicitação' : 'Solicitação de ' + a.professor, wide: true,
+      body: `<div class="grid-2">
+          <label class="field"><span>Professor(a) <b class="req">*</b></span><input type="text" id="af-prof" list="dl-profs" value="${esc(a.professor || '')}"></label>
+          <label class="field"><span>Data da falta <b class="req">*</b></span><input type="date" id="af-date" value="${esc(a.date || '')}"></label>
+        </div>
+        <div class="grid-2">
+          <label class="field"><span>Tipo</span><select id="af-tipo">${TIPOS_FALTA.map(t => `<option ${t === a.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label class="field"><span>Aulas afetadas</span><input type="text" id="af-aulas" value="${esc(a.aulas || '')}" placeholder="Ex.: 1ª, 2ª e 5ª aulas"></label>
+        </div>
+        <label class="field"><span>Motivo <b class="req">*</b></span><textarea id="af-motivo" rows="2">${esc(a.motivo || '')}</textarea></label>
+        <div class="field"><span>Turmas afetadas</span>
+          <div class="chips" id="af-turmas">${turmas.map(t => `<span class="chip pick ${(a.turmas || []).includes(t) ? 'on' : ''}" data-t="${esc(t)}" role="checkbox" tabindex="0" aria-checked="${(a.turmas || []).includes(t)}">${esc(t)}</span>`).join('') || '<span class="small muted">Cadastre turmas no Planejamento ou digite abaixo.</span>'}</div>
+          <input type="text" id="af-turma-extra" placeholder="Outras turmas, separadas por vírgula" style="margin-top:6px">
+        </div>
+        <div class="panel" style="background:var(--surface-2);border:0">
+          <h3 style="margin-bottom:10px">Substituição</h3>
+          <div class="stack" style="gap:10px">
+            <label class="field"><span>Quem vai cobrir as aulas</span><input type="text" id="af-sub" list="dl-profs" value="${esc(a.substituto || '')}" placeholder="Nome do professor substituto"></label>
+            <label class="field"><span>Atividade / plano deixado para a turma</span><textarea id="af-plano" rows="2">${esc(a.plano || '')}</textarea></label>
+          </div>
+        </div>
+        <div class="grid-2">
+          <label class="field"><span>Status</span><select id="af-status">${Object.keys(STATUS_PILL).map(s => `<option ${s === a.status ? 'selected' : ''}>${s}</option>`).join('')}</select></label>
+          <label class="field"><span>Observação da gestão</span><input type="text" id="af-gestao" value="${esc(a.gestao || '')}"></label>
+        </div>`,
+      actions: [{ label: 'Cancelar' }, { label: isNew ? 'Registrar solicitação' : 'Salvar', cls: 'primary', onClick: mm => {
+        if (!validate(mm, ['#af-prof', '#af-date', '#af-motivo'])) return false;
+        const sel = $$('#af-turmas .chip.on', mm).map(c => c.dataset.t);
+        const extra = $('#af-turma-extra', mm).value.split(',').map(s => s.trim()).filter(Boolean);
+        extra.forEach(ensureTurma);
+        const data = { professor: $('#af-prof', mm).value.trim(), date: $('#af-date', mm).value, tipo: $('#af-tipo', mm).value, aulas: $('#af-aulas', mm).value.trim(), motivo: $('#af-motivo', mm).value.trim(),
+          turmas: [...new Set([...sel, ...extra])], substituto: $('#af-sub', mm).value.trim(), plano: $('#af-plano', mm).value.trim(), status: $('#af-status', mm).value, gestao: $('#af-gestao', mm).value.trim() };
+        if (isNew) state.abonadas.push({ id: uid(), createdAt: new Date().toISOString(), ...data }); else Object.assign(a, data);
+        App.refresh(); toast(isNew ? 'Solicitação registrada.' : 'Solicitação atualizada.');
+      } }]
+    });
+    const toggle = c => { c.classList.toggle('on'); c.setAttribute('aria-checked', c.classList.contains('on')); };
+    $('#af-turmas', m).onclick = e => { const c = e.target.closest('.chip.pick'); c && toggle(c); };
+    $('#af-turmas', m).onkeydown = e => { const c = e.target.closest('.chip.pick'); if (c && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); toggle(c); } };
+    if (focusSub) setTimeout(() => $('#af-sub', m).focus(), 60);
+  },
+  decide(a, status) { a.status = status; App.refresh(); toast(`Solicitação de ${a.professor} ${status.toLowerCase()}.`, status === 'Aprovada' ? 'ok' : 'warn'); },
+  async remove(a) {
+    if (!await confirmDialog(`Excluir a solicitação de <b>${esc(a.professor)}</b> em ${fmtDate(a.date)}?`, { ok: 'Excluir' })) return;
+    state.abonadas = state.abonadas.filter(x => x.id !== a.id); App.refresh(); toast('Solicitação excluída.');
+  },
+
+  render() {
+    const list = this.filtered();
+    const c = k => list.filter(a => a.status === k).length;
+    const noSub = list.filter(a => a.status !== 'Rejeitada' && !a.substituto && a.date >= todayISO()).length;
+    $('#ab-stats').innerHTML = `
+      <div class="stat"><div class="k">No período</div><div class="v">${list.length}</div><div class="s">solicitação(ões)</div></div>
+      <div class="stat"><div class="k">Pendentes</div><div class="v" style="color:var(--warn)">${c('Pendente')}</div><div class="s">aguardando a gestão</div></div>
+      <div class="stat"><div class="k">Aprovadas</div><div class="v" style="color:var(--ok)">${c('Aprovada')}</div><div class="s">${c('Rejeitada')} rejeitada(s)</div></div>
+      <div class="stat"><div class="k">Sem substituto</div><div class="v" style="color:${noSub ? 'var(--danger)' : 'inherit'}">${noSub}</div><div class="s">faltas futuras sem cobertura</div></div>`;
+    $('#dl-profs').innerHTML = this.professors().map(p => `<option value="${esc(p)}">`).join('');
+    if (!state.abonadas.length) {
+      $('#ab-body').innerHTML = `<div class="empty"><strong>Nenhuma solicitação registrada</strong>Registre a data, o motivo e as turmas afetadas. Depois a gestão aprova e define quem cobre as aulas.
+        <div class="row"><button class="btn primary" onclick="Abon.form(null)">Nova solicitação</button></div></div>`;
+      return;
+    }
+    if (!list.length) { $('#ab-body').innerHTML = '<div class="empty">Nenhuma solicitação com estes filtros.</div>'; return; }
+    $('#ab-body').innerHTML = `<div class="table-wrap"><table class="data"><thead><tr><th>Data</th><th>Professor(a)</th><th>Tipo e motivo</th><th>Turmas / aulas</th><th>Substituto</th><th>Status</th><th></th></tr></thead><tbody>
+      ${list.map(a => `<tr>
+        <td class="num" style="white-space:nowrap"><b>${fmtDate(a.date)}</b><div class="small muted">${weekday(a.date)}</div></td>
+        <td><b>${esc(a.professor)}</b></td>
+        <td><span class="small muted">${esc(a.tipo)}</span><div>${esc(a.motivo)}</div></td>
+        <td>${esc((a.turmas || []).join(', ') || '—')}${a.aulas ? `<div class="small muted">${esc(a.aulas)}</div>` : ''}</td>
+        <td>${a.substituto ? esc(a.substituto) : (a.status === 'Rejeitada' ? '—' : `<button class="btn sm" data-act="sub" data-id="${a.id}" type="button">Definir</button>`)}${a.plano ? `<div class="small muted">${esc(a.plano)}</div>` : ''}</td>
+        <td><span class="pill ${STATUS_PILL[a.status]}">${esc(a.status)}</span>${a.gestao ? `<div class="small muted">${esc(a.gestao)}</div>` : ''}</td>
+        <td class="actions">${a.status !== 'Aprovada' ? `<button class="btn sm" data-act="ok" data-id="${a.id}" type="button">Aprovar</button>` : ''}
+          ${a.status !== 'Rejeitada' ? `<button class="btn sm ghost danger" data-act="no" data-id="${a.id}" type="button">Rejeitar</button>` : ''}
+          <button class="btn sm ghost" data-act="edit" data-id="${a.id}" type="button">Editar</button>
+          <button class="btn sm ghost danger" data-act="del" data-id="${a.id}" type="button" aria-label="Excluir">×</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  },
+
+  pdf() {
+    if (!pdfReady()) return;
+    const list = this.filtered();
+    if (!list.length) return toast('Nenhuma solicitação no período filtrado.', 'warn');
+    const periodo = this.from || this.to ? `Período: ${this.from ? fmtDate(this.from) : 'início'} a ${this.to ? fmtDate(this.to) : 'hoje em diante'}` : 'Todas as datas';
+    const doc = newPdf('l');
+    const y = pdfHeader(doc, 'Relatório de abonadas e substituições', `${periodo}${this.status ? ' · ' + this.status + 's' : ''} · ${list.length} registro(s)`);
+    const c = k => list.filter(a => a.status === k).length;
+    doc.setFontSize(9.5); doc.setTextColor(...PDF_MUTED);
+    doc.text(`Pendentes: ${c('Pendente')}    Aprovadas: ${c('Aprovada')}    Rejeitadas: ${c('Rejeitada')}    Sem substituto: ${list.filter(a => a.status !== 'Rejeitada' && !a.substituto).length}`, 12, y + 1);
+    doc.autoTable({ ...tableStyles, startY: y + 5,
+      head: [['Data', 'Professor(a)', 'Tipo / motivo', 'Turmas / aulas', 'Substituto / plano', 'Status', 'Obs. da gestão']],
+      body: list.map(a => [`${fmtDate(a.date)}\n${weekday(a.date)}`, a.professor, `${a.tipo}\n${a.motivo}`, `${(a.turmas || []).join(', ') || '—'}${a.aulas ? '\n' + a.aulas : ''}`,
+        `${a.substituto || (a.status === 'Rejeitada' ? '—' : 'A DEFINIR')}${a.plano ? '\n' + a.plano : ''}`, a.status, a.gestao || '']),
+      columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 36, fontStyle: 'bold' }, 5: { cellWidth: 22 } },
+      didParseCell: d => {
+        if (d.section !== 'body') return;
+        if (d.column.index === 5) d.cell.styles.textColor = { Pendente: [154, 91, 0], Aprovada: [29, 127, 71], Rejeitada: [179, 54, 27] }[d.cell.raw] || [20, 30, 28];
+        if (d.column.index === 4 && String(d.cell.raw).startsWith('A DEFINIR')) d.cell.styles.textColor = [179, 54, 27];
+      } });
+    const fy = doc.lastAutoTable.finalY + 18;
+    if (fy < 195) {
+      doc.setDrawColor(120); doc.setLineWidth(.2);
+      doc.line(40, fy, 120, fy); doc.line(177, fy, 257, fy);
+      doc.setFontSize(8); doc.setTextColor(...PDF_MUTED);
+      doc.text('Direção', 80, fy + 4, { align: 'center' }); doc.text('Coordenação pedagógica', 217, fy + 4, { align: 'center' });
+    }
+    savePdf(doc, `abonadas-${todayISO()}.pdf`);
+  },
+  async importJSON() {
+    const d = await pickJSON(); if (!d) return;
+    const list = Array.isArray(d) ? d : d.abonadas;
+    if (!Array.isArray(list)) return toast('Este JSON não contém solicitações de abonada.', 'error');
+    const valid = list.filter(a => a && a.professor && a.date).map(a => ({ status: 'Pendente', turmas: [], tipo: 'Abonada', motivo: '', ...a, status: STATUS_PILL[a.status] ? a.status : 'Pendente' }));
+    const r = mergeById(state.abonadas, valid);
+    App.refresh(); toast(`Importado: ${r.added} nova(s), ${r.updated} atualizada(s).`);
+  }
+};
+
+/* =====================================================================
+   12. APLICAÇÃO: navegação, início, tema, backup e "Limpar tudo"
+   ===================================================================== */
+const VIEWS = { inicio: 'Início', carometro: 'Carômetro', mapa: 'Mapa de Sala', rifas: 'Rifas', cantina: 'Cantina', planejamento: 'Planejamento de Aulas', abonadas: 'Abonadas' };
+const App = {
+  view: 'inicio',
+  init() {
+    $('#nav').onclick = e => { const b = e.target.closest('[data-view]'); if (b) this.go(b.dataset.view); };
+    $('#btn-menu').onclick = () => this.nav(true);
+    $('#scrim').onclick = () => this.nav(false);
+    $('#btn-theme').onclick = () => this.toggleTheme();
+    $('#btn-clear-all').onclick = () => this.clearAll();
+    $('#set-school').oninput = e => { state.settings.school = e.target.value; this.brand(); };
+    $('#logo-box').onclick = $('#btn-logo').onclick = () => this.uploadLogo();
+    $('#btn-logo-rm').onclick = () => { Object.assign(state.settings, { logo: null, logoW: 0, logoH: 0 }); this.brand(); this.renderHome(); };
+    $('#btn-backup-export').onclick = () => this.backup();
+    $('#btn-backup-import').onclick = () => this.restore();
+    $('#btn-sample').onclick = () => this.sample();
+    $('#home-stats').onclick = e => { const b = e.target.closest('[data-go]'); b && this.go(b.dataset.go); };
+    window.addEventListener('hashchange', () => this.go(location.hash.slice(1), false));
+    // Aviso ao sair com dados na memória
+    window.addEventListener('beforeunload', e => { if (this.hasData()) { e.preventDefault(); e.returnValue = ''; } });
+    [Car, SeatMap, Rifa, Cantina, Plan, Abon].forEach(m => m.init());
+    this.initTheme();
+    this.refresh();
+    this.go(VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : 'inicio', false);
+  },
+  nav(open) { document.body.classList.toggle('nav-open', open); $('#scrim').hidden = !open; },
+  go(view, setHash = true) {
+    if (!VIEWS[view]) view = 'inicio';
+    this.view = view;
+    $$('.view').forEach(v => v.hidden = v.id !== 'view-' + view);
+    $$('#nav [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    $('#topbar-title').textContent = VIEWS[view];
+    if (setHash && location.hash !== '#' + view) history.replaceState(null, '', '#' + view);
+    this.nav(false);
+    window.scrollTo(0, 0);
+  },
+  hasData() { const s = state; return !!(s.students.length || s.raffles.length || s.products.length || s.sales.length || s.lessons.length || s.abonadas.length); },
+
+  /** Re-renderiza todos os módulos (chamado após qualquer alteração estrutural). */
+  refresh() {
+    $('#dl-turmas').innerHTML = turmasSorted().map(t => `<option value="${esc(t)}">`).join('');
+    Car.render(); SeatMap.render(); Rifa.render(); Cantina.render(); Plan.render(); Abon.render();
+    this.brand(); this.renderHome(); this.counts();
+  },
+  counts() {
+    $('#cnt-alunos').textContent = state.students.length;
+    $('#cnt-rifas').textContent = state.raffles.length;
+    const cart = state.cart.reduce((a, c) => a + c.qty, 0);
+    $('#cnt-cart').textContent = cart; $('#cnt-cart').hidden = !cart;
+    const pend = state.abonadas.filter(a => a.status === 'Pendente').length;
+    $('#cnt-abon').textContent = pend; $('#cnt-abon').hidden = !pend;
+  },
+  brand() {
+    const s = state.settings;
+    $('#brand-name').textContent = s.school || 'Secretaria Escolar';
+    $('#brand-mark').innerHTML = s.logo ? `<img src="${s.logo}" alt="">` : esc(initials(s.school || 'Secretaria Escolar'));
+    $('#home-title').textContent = s.school || 'Secretaria Escolar';
+    document.title = s.school ? `${s.school} · Secretaria Escolar` : 'Secretaria Escolar';
+  },
+  renderHome() {
+    const s = state.settings, today = todayISO();
+    const d = new Date();
+    $('#home-date').textContent = `${DIAS[d.getDay()]}, ${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`;
+    if (document.activeElement !== $('#set-school')) $('#set-school').value = s.school;
+    $('#logo-box').innerHTML = s.logo ? `<img src="${s.logo}" alt="Logo da escola">` : 'Enviar logo ou imagem';
+    $('#btn-logo-rm').hidden = !s.logo;
+    const salesToday = Cantina.summary(Cantina.daySales(today));
+    const month = today.slice(0, 7);
+    const rfSold = state.raffles.reduce((a, r) => a + Rifa.stats(r).sold, 0);
+    const pend = state.abonadas.filter(a => a.status === 'Pendente').length;
+    const tiles = [
+      ['carometro', 'Alunos', state.students.length, `${state.turmas.length} turma(s)`],
+      ['mapa', 'No mapa de sala', state.seatMap.seats.filter(Boolean).length, `${state.seatMap.rows * state.seatMap.cols} carteiras`],
+      ['rifas', 'Rifas', state.raffles.length, `${rfSold} número(s) vendido(s)`],
+      ['cantina', 'Vendas hoje', money(salesToday.total), `${salesToday.count} venda(s)`],
+      ['planejamento', 'Aulas no mês', state.lessons.filter(l => l.date.startsWith(month)).length, `${state.disciplinas.length} disciplina(s)`],
+      ['abonadas', 'Abonadas pendentes', pend, `${state.abonadas.length} no total`]
+    ];
+    $('#home-stats').innerHTML = tiles.map(([v, k, n, s2]) => `<button class="stat" data-go="${v}" type="button"><div class="k">${k}</div><div class="v">${n}</div><div class="s">${s2}</div></button>`).join('');
+  },
+  async uploadLogo() {
+    const [f] = await pickFiles('image/*'); if (!f) return;
+    try {
+      const img = await loadImg(await fileToDataURL(f));
+      const r = downscale(img, 400, 'image/png');
+      Object.assign(state.settings, { logo: r.url, logoW: r.w, logoH: r.h });
+      this.brand(); this.renderHome(); toast('Imagem da escola atualizada.');
+    } catch { toast('Não foi possível ler esta imagem.', 'error'); }
+  },
+
+  /* ---------- Tema claro/escuro (a preferência fica só como conveniência) ---------- */
+  initTheme() {
+    let t = null; try { t = localStorage.getItem('se-theme'); } catch { }
+    if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+    this.themeLabel();
+    matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => this.themeLabel());
+  },
+  isDark() { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; },
+  toggleTheme() {
+    const next = this.isDark() ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('se-theme', next); } catch { }
+    this.themeLabel();
+  },
+  themeLabel() { $('#theme-label').textContent = this.isDark() ? 'Tema claro' : 'Tema escuro'; },
+
+  /* ---------- Backup completo ---------- */
+  backup() {
+    if (!this.hasData() && !state.settings.school) return toast('Ainda não há dados para salvar.', 'warn');
+    exportJSON({ tipo: 'backup-secretaria-escolar', versao: 1, exportadoEm: new Date().toISOString(), dados: state }, `backup-escola-${todayISO()}.json`);
+  },
+  async restore() {
+    const d = await pickJSON(); if (!d) return;
+    const data = d.dados || d;
+    if (!data || typeof data !== 'object' || !('students' in data || 'raffles' in data || 'lessons' in data)) return toast('Este arquivo não é um backup completo. Para arquivos de um módulo, use o "Importar JSON" do próprio módulo.', 'error', 6000);
+    if (this.hasData() && !await confirmDialog('Importar o backup vai <b>substituir</b> todos os dados que estão na memória agora. Continuar?', { ok: 'Substituir dados' })) return;
+    const base = freshState();
+    state = { ...base, ...data, settings: { ...base.settings, ...(data.settings || {}) }, seatMap: { ...base.seatMap, ...(data.seatMap || {}) } };
+    App.refresh(); toast('Backup restaurado.');
+  },
+
+  async clearAll() {
+    if (!await confirmDialog('Apagar <b>todos</b> os dados da memória: alunos, fotos, mapa de sala, rifas, produtos, vendas, planejamento e abonadas? Isto não pode ser desfeito.', { title: 'Limpar tudo', ok: 'Apagar tudo' })) return;
+    state = freshState();
+    Car.filter = ''; Plan.fTurma = Plan.fDisc = ''; SeatMap.selected = null; Rifa.sel.clear();
+    this.refresh(); toast('Memória limpa. O sistema está vazio.');
+  },
+
+  /** Dados fictícios para conhecer o sistema (sem fotos reais). */
+  sample() {
+    const go = () => {
+      const t1 = '6º A', t2 = '7º B';
+      [t1, t2].forEach(ensureTurma);
+      ['Matemática', 'Língua Portuguesa', 'Ciências', 'História', 'Geografia'].forEach(ensureDisc);
+      const nomes = ['Ana Beatriz Souza', 'Bruno Henrique Lima', 'Carla Mendes', 'Davi Oliveira', 'Eduarda Santos', 'Felipe Rocha', 'Gabriela Martins', 'Heitor Alves', 'Isabela Costa', 'João Pedro Ramos', 'Larissa Ferreira', 'Miguel Araújo', 'Nicole Barbosa', 'Otávio Pereira', 'Pietra Carvalho', 'Rafael Gomes'];
+      nomes.forEach((n, i) => state.students.push({ id: uid(), name: n, turma: i < 10 ? t1 : t2, numero: String(i < 10 ? i + 1 : i - 9), photo: null, original: null, crop: null, detected: null }));
+      state.seatMap = { title: 'Mapa de sala — ' + t1, turma: t1, rows: 3, cols: 4, seats: Array(12).fill(null), showPhotos: true };
+      state.students.filter(s => s.turma === t1).forEach((s, i) => state.seatMap.seats[i] = s.id);
+      const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return todayISO(x); };
+      const rf = { id: uid(), name: 'Rifa da Festa Junina', prize: 'Cesta de doces típicos', price: 5, qty: 100, start: 1, date: d(20), pix: '', notes: 'Exemplo', winners: [], createdAt: new Date().toISOString(), numbers: Array.from({ length: 100 }, (_, i) => ({ n: i + 1, sold: false, buyer: '', phone: '', paid: false })) };
+      [[3, 'Maria Aparecida', true], [7, 'José Carlos', true], [8, 'José Carlos', true], [15, 'Fernanda Lopes', false], [22, 'Paulo Roberto', true], [41, 'Sandra Lima', false], [56, 'Maria Aparecida', true]]
+        .forEach(([n, b, p]) => Object.assign(rf.numbers[n - 1], { sold: true, buyer: b, phone: '', paid: p }));
+      state.raffles.push(rf); state.activeRaffleId = rf.id;
+      const pimg = (emoji, bg) => { const c = document.createElement('canvas'); c.width = c.height = 400; const x = c.getContext('2d'); x.fillStyle = bg; x.fillRect(0, 0, 400, 400); x.font = '210px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(emoji, 200, 215); return c.toDataURL('image/jpeg', .85); };
+      [['Pão de queijo', 3.5, 40, '🧀', '#fbe9c6'], ['Suco natural', 4, 25, '🧃', '#d8f0dc'], ['Bolo de cenoura', 5, 12, '🍰', '#fde0d2'], ['Pipoca', 2.5, 30, '🍿', '#fdf3c4'], ['Fruta da estação', 2, null, '🍎', '#f9dcdc'], ['Água mineral', 2.5, 4, '💧', '#dbeafb']]
+        .forEach(([name, price, stock, e, bg]) => state.products.push({ id: uid(), name, price, stock, photo: pimg(e, bg) }));
+      state.lessons.push(
+        { id: uid(), date: d(0), turma: t1, disciplina: 'Matemática', aula: '1ª e 2ª aulas', conteudo: 'Frações equivalentes', objetivos: 'Reconhecer e gerar frações equivalentes usando representações visuais.', recursos: 'Material dourado, lousa', obs: '' },
+        { id: uid(), date: d(1), turma: t2, disciplina: 'Ciências', aula: '3ª aula', conteudo: 'Ciclo da água', objetivos: 'Descrever as etapas do ciclo da água.', recursos: 'Vídeo curto, projetor', obs: 'Levar a turma ao laboratório.' },
+        { id: uid(), date: d(2), turma: t1, disciplina: 'Língua Portuguesa', aula: '4ª aula', conteudo: 'Gênero textual: notícia', objetivos: 'Identificar a estrutura da notícia.', recursos: 'Jornais impressos', obs: '' });
+      state.abonadas.push(
+        { id: uid(), createdAt: new Date().toISOString(), professor: 'Prof.ª Renata Dias', date: d(3), tipo: 'Abonada', motivo: 'Assunto particular', turmas: [t1], aulas: '1ª e 2ª aulas', substituto: 'Prof. Marcos Vinícius', plano: 'Lista de exercícios de frações', status: 'Aprovada', gestao: '' },
+        { id: uid(), createdAt: new Date().toISOString(), professor: 'Prof. Sérgio Nunes', date: d(5), tipo: 'Atestado médico', motivo: 'Consulta médica agendada', turmas: [t2], aulas: '3ª aula', substituto: '', plano: '', status: 'Pendente', gestao: '' });
+      App.refresh(); toast('Dados de exemplo carregados. Use "Limpar tudo" para começar do zero.');
+    };
+    if (this.hasData()) confirmDialog('Os dados de exemplo serão <b>somados</b> aos que já estão na memória. Continuar?', { ok: 'Adicionar exemplos', danger: false }).then(ok => ok && go());
+    else go();
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
